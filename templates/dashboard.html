@@ -103,20 +103,39 @@
         }
         .toast.success { background: #0f3460; display: block; }
         .toast.error { background: #e94560; display: block; }
+        .loading-overlay {
+            position: fixed; inset: 0; background: rgba(255,255,255,0.7);
+            z-index: 3000; display: none; align-items: center; justify-content: center;
+            flex-direction: column; gap: 12px;
+        }
+        .loading-overlay.active { display: flex; }
+        .spinner {
+            width: 40px; height: 40px; border: 4px solid #ddd;
+            border-top-color: #0f3460; border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
     </style>
 </head>
 <body>
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="spinner"></div>
+        <div style="color:#0f3460;font-weight:600;" id="loading-text">Processando...</div>
+    </div>
     <div class="container">
         <header>
             <h1>⚖ <span>Processos</span>Dashboard</h1>
             <div class="actions">
                 <button class="btn btn-success" onclick="abrirModal('importar')">📥 Importar XLSX</button>
                 <button class="btn btn-primary" onclick="abrirModal('novo')">➕ Novo Processo</button>
-                <button class="btn btn-outline"
+                <button class="btn btn-outline" id="btn-atualizar"
                     hx-post="/ciclo-atualizacao"
                     hx-trigger="click"
                     hx-target="#toast"
-                    hx-swap="innerHTML">
+                    hx-swap="innerHTML"
+                    hx-on::before-request="document.getElementById('btn-atualizar').disabled=true;document.getElementById('btn-atualizar').innerHTML='⏳ Atualizando...'"
+                    hx-on::after-request="document.getElementById('btn-atualizar').disabled=false;document.getElementById('btn-atualizar').innerHTML='🔄 Atualizar Todos'">
                     🔄 Atualizar Todos
                 </button>
                 <a href="/exportar/csv{{ '?' if busca or tribunal_filtro or status_filtro }}{{ 'busca=' ~ busca ~ '&' if busca }}{{ 'tribunal=' ~ tribunal_filtro ~ '&' if tribunal_filtro }}{{ 'status_filtro=' ~ status_filtro if status_filtro }}" class="btn btn-outline">📥 CSV</a>
@@ -157,8 +176,8 @@
                 <option value="arquivado" {% if status_filtro == 'arquivado' %}selected{% endif %}>Arquivado</option>
                 <option value="suspenso" {% if status_filtro == 'suspenso' %}selected{% endif %}>Suspenso</option>
             </select>
-            <button type="submit" class="btn btn-primary">Filtrar</button>
-            <a href="/" class="btn btn-outline">Limpar</a>
+            <button type="submit" class="btn btn-primary" onclick="window.scrollTo({top:0,behavior:'smooth'})">Filtrar</button>
+            <a href="/" class="btn btn-outline" onclick="window.scrollTo({top:0,behavior:'smooth'})">Limpar</a>
         </form>
 
         <div class="table-wrapper">
@@ -209,11 +228,13 @@
                         </td>
                         <td>
                             <a href="/processo/{{ p.id }}" class="btn btn-sm btn-outline">Ver</a>
-                            <button class="btn btn-sm btn-outline"
+                            <button class="btn btn-sm btn-outline btn-atualizar-single"
                                 hx-post="/processo/{{ p.id }}/atualizar"
                                 hx-trigger="click"
                                 hx-swap="innerHTML"
-                                hx-target="#toast">
+                                hx-target="#toast"
+                                hx-on::before-request="this.disabled=true;this.innerHTML='⏳'"
+                                hx-on::after-request="this.disabled=false;this.innerHTML='🔄'">
                                 🔄
                             </button>
                         </td>
@@ -294,7 +315,8 @@
             </p>
             <form hx-post="/importar/xlsx" hx-target="#resultado-importacao"
                   hx-encoding="multipart/form-data"
-                  hx-on::after-request="if(event.detail.successful) {  }">
+                  hx-on::before-request="document.getElementById('btn-importar-submit').disabled=true;document.getElementById('btn-importar-submit').innerHTML='⏳ Importando...'"
+                  hx-on::after-request="document.getElementById('btn-importar-submit').disabled=false;document.getElementById('btn-importar-submit').innerHTML='Importar';if(event.detail.successful){setTimeout(function(){location.reload()},2000);}">
                 <div class="form-group">
                     <label>Arquivo XLSX</label>
                     <input type="file" name="file" accept=".xlsx" required>
@@ -302,7 +324,7 @@
                 <div id="resultado-importacao" style="margin-top:12px;"></div>
                 <div class="form-actions">
                     <button type="button" class="btn btn-outline" onclick="fecharModal('importar')">Cancelar</button>
-                    <button type="submit" class="btn btn-success">Importar</button>
+                    <button type="submit" id="btn-importar-submit" class="btn btn-success">Importar</button>
                 </div>
             </form>
         </div>
@@ -311,8 +333,25 @@
     <div id="toast" class="toast"></div>
 
     <script>
+        function mostrarLoading(texto) {
+            var overlay = document.getElementById('loading-overlay');
+            document.getElementById('loading-text').textContent = texto || 'Processando...';
+            overlay.classList.add('active');
+        }
+        function esconderLoading() {
+            document.getElementById('loading-overlay').classList.remove('active');
+        }
+
+        document.body.addEventListener('htmx:beforeRequest', function(evt) {
+            var target = evt.detail.target;
+            if (target && target.id === 'resultado-importacao') {
+                target.innerHTML = '<div style="text-align:center;padding:20px;"><div class="spinner" style="margin:0 auto;"></div><p style="margin-top:8px;color:#666;">Importando e consultando DataJud...</p></div>';
+            }
+        });
+
         function abrirModal(id) {
             document.getElementById('modal-' + id).classList.add('active');
+            if (id === 'novo') setTimeout(function(){ document.querySelector('#modal-novo input[name=numero_cnj]').focus(); }, 100);
         }
         function fecharModal(id) {
             document.getElementById('modal-' + id).classList.remove('active');
@@ -379,17 +418,24 @@
                     html += '</div>';
                 }
                 html += montarAmostra(data.amostra_linha);
-                html += '<div style="margin-top:8px;text-align:right;"><button class="btn btn-outline" onclick="fecharModal(\'importar\');setTimeout(function(){location.reload()},300);">Fechar</button></div>';
+                html += '<div style="margin-top:8px;text-align:right;"><button class="btn btn-outline" onclick="fecharModal(\'importar\');location.reload()">Fechar</button></div>';
                 document.getElementById('resultado-importacao').innerHTML = html;
             } else if (data.mensagem) {
                 html = '<div class="toast" style="display:block;background:#e94560;margin-bottom:12px;">❌ ' + data.mensagem + '</div>';
                 if (data.amostra_linha) {
                     html += montarAmostra(data.amostra_linha);
                 }
-                html += '<div style="margin-top:8px;text-align:right;"><button class="btn btn-outline" onclick="fecharModal(\'importar\')">Fechar</button></div>';
+                html += '<div style="margin-top:8px;text-align:right;"><button class="btn btn-outline" onclick="fecharModal(\'importar\');document.getElementById(\'btn-importar-submit\').disabled=false;document.getElementById(\'btn-importar-submit\').innerHTML=\'Importar\'">Fechar</button></div>';
                 document.getElementById('resultado-importacao').innerHTML = html;
             }
         }
+
+        document.querySelector('.filters')?.addEventListener('submit', function() {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+        document.querySelectorAll('.pagination a').forEach(function(a) {
+            a.addEventListener('click', function() { window.scrollTo({ top: 0, behavior: 'smooth' }); });
+        });
 
         document.body.addEventListener('htmx:afterRequest', function(evt) {
             var target = evt.detail.target;
