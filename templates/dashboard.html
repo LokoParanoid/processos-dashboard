@@ -119,7 +119,6 @@
                     hx-swap="innerHTML">
                     🔄 Atualizar Todos
                 </button>
-                <a href="/busca-oab" class="btn btn-outline">🔍 OAB</a>
                 <a href="/exportar/csv{{ '?' if busca or tribunal_filtro or status_filtro }}{{ 'busca=' ~ busca ~ '&' if busca }}{{ 'tribunal=' ~ tribunal_filtro ~ '&' if tribunal_filtro }}{{ 'status_filtro=' ~ status_filtro if status_filtro }}" class="btn btn-outline">📥 CSV</a>
                 <a href="/config" class="btn btn-outline">⚙ Config</a>
             </div>

@@ -13,7 +13,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from dotenv import load_dotenv
 
 from database import init_db, get_session, Processo, Movimentacao, Config
-from datajud_client import atualizar_processo, consultar_por_oab, extrair_dados_processo
+from datajud_client import atualizar_processo
 from astrea_import import importar_xlsx
 from scheduler import iniciar as iniciar_scheduler, parar as parar_scheduler, executar_ciclo_atualizacao
 
@@ -340,48 +340,4 @@ async def exportar_csv(busca: str = Query(""), tribunal: str = Query(""),
         session.close()
 
 
-@app.get("/busca-oab", response_class=HTMLResponse)
-async def busca_oab_page(request: Request, oab: str = Query(""), tribunal: str = Query("")):
-    resultados = []
-    if oab:
-        loop = asyncio.get_event_loop()
-        resultados = await loop.run_in_executor(None, consultar_por_oab, oab, tribunal if tribunal else None)
-    from datajud_client import _normalizar_oab
-    uf, numero = _normalizar_oab(oab) if oab else ("", "")
-    return templates.TemplateResponse(request, "busca_oab.html", {
-        "oab": oab,
-        "oab_numero": numero,
-        "tribunal": tribunal,
-        "resultados": resultados,
-        "total": len(resultados),
-    })
 
-
-@app.post("/busca-oab/importar")
-async def importar_processo_oab(request: Request):
-    data = await request.json()
-    dados = extrair_dados_processo(data)
-    cnj = dados["numero_cnj"]
-    if not cnj:
-        return JSONResponse({"status": "erro", "mensagem": "CNJ obrigatório"})
-
-    session = get_session()
-    try:
-        existe = session.query(Processo).filter_by(numero_cnj=cnj).first()
-        if existe:
-            return JSONResponse({"status": "erro", "mensagem": "Processo já cadastrado"})
-
-        processo = Processo(
-            numero_cnj=cnj,
-            tribunal=dados.get("tribunal", ""),
-            classe=dados.get("classe", ""),
-            assunto=dados.get("assunto", ""),
-            parte_autora=dados.get("parte_autora", ""),
-            parte_re=dados.get("parte_re", ""),
-            advogado_oab=dados.get("advogado_oab", ""),
-        )
-        session.add(processo)
-        session.commit()
-        return JSONResponse({"status": "ok", "id": processo.id, "numero_cnj": cnj})
-    finally:
-        session.close()

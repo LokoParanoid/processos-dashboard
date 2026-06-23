@@ -1,9 +1,7 @@
 import hashlib
 import logging
 import os
-import re
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Optional
 
@@ -40,18 +38,6 @@ def _get_api_key() -> str:
 def _get_headers() -> dict[str, str]:
     return {"Authorization": f"APIKey {_get_api_key()}"}
 
-UF_PARA_TRIBUNAIS = {
-    "AC": ["tjac"], "AL": ["tjal"], "AM": ["tjam"], "AP": ["tjap"],
-    "BA": ["tjba"], "CE": ["tjce"], "DF": ["tjdf", "trf1"], "ES": ["tjes", "trf2"],
-    "GO": ["tjgo", "trf1"], "MA": ["tjma", "trf1"], "MG": ["tjmg", "trf1"],
-    "MS": ["tjms", "trf3"], "MT": ["tjmt", "trf1"], "PA": ["tjpa", "trf1"],
-    "PB": ["tjpb", "trf5"], "PE": ["tjpe", "trf5"], "PI": ["tjpi", "trf1"],
-    "PR": ["tjpr", "trf4"], "RJ": ["tjrj", "trf2"], "RN": ["tjrn", "trf5"],
-    "RO": ["tjro", "trf1"], "RR": ["tjrr", "trf1"], "RS": ["tjrs", "trf4"],
-    "SC": ["tjsc", "trf4"], "SE": ["tjse", "trf5"], "SP": ["tjsp", "trf3"],
-    "TO": ["tjto", "trf1"],
-}
-_TRIBUNAIS_SUPERIORES = ["stj", "stf", "tst", "tse", "stm"]
 
 TRIBUNAIS_INDICES = {
     "tjrs": "api_publica_tjrs",
@@ -198,36 +184,6 @@ def _gerar_hash(data: datetime, descricao: str) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
-def extrair_dados_processo(source: dict) -> dict:
-    classe = source.get("classe", {})
-    orgao = source.get("orgaoJulgador", {})
-    tribunal = orgao.get("tribunal") or source.get("tribunal") or ""
-    advogados = source.get("advogados") or []
-    oab = ""
-    for adv in advogados:
-        oab = adv.get("numero_oab") or adv.get("oab") or ""
-        if oab:
-            break
-    partes_autor = []
-    partes_reu = []
-    for parte in (source.get("partes") or []):
-        tipo = (parte.get("tipoParte") or "").lower()
-        nome = parte.get("nome") or parte.get("nomeParte") or ""
-        if "autor" in tipo or "requerente" in tipo or "autora" in tipo:
-            partes_autor.append(nome)
-        elif "reu" in tipo or "requerido" in tipo or "r\u00e9" in tipo:
-            partes_reu.append(nome)
-
-    return {
-        "numero_cnj": source.get("numeroProcesso") or "",
-        "tribunal": tribunal,
-        "classe": classe.get("nome") if isinstance(classe, dict) else "",
-        "assunto": source.get("assunto") or "",
-        "parte_autora": "; ".join(partes_autor) if partes_autor else "",
-        "parte_re": "; ".join(partes_reu) if partes_reu else "",
-        "advogado_oab": oab,
-    }
-
 
 def atualizar_processo(numero_cnj: str) -> dict:
     session = get_session()
@@ -288,67 +244,4 @@ def atualizar_processo(numero_cnj: str) -> dict:
         session.close()
 
 
-_RE_OAB = re.compile(r'([A-Za-z]{2})\s*([\d.]+)')
 
-
-def _normalizar_oab(oab: str) -> tuple[str, str]:
-    uf = ""
-    m = _RE_OAB.match(oab.strip())
-    if m:
-        uf = m.group(1).upper()
-        numero = m.group(2)
-    else:
-        numero = oab.strip()
-    numero = re.sub(r'\D', '', numero)
-    return uf, numero
-
-
-def _consultar_oab_por_indice(indice: str, numero_oab: str, timeout: int = 15) -> list[dict]:
-    url = f"{BASE_URL}/{indice}/_search"
-    params = {"q": f"(advogados.numero_oab:{numero_oab} OR advogados.oab:{numero_oab})", "size": "50"}
-    try:
-        resp = requests.get(url, params=params, headers=_get_headers(), timeout=timeout)
-        if resp.status_code == 401:
-            logger.error(f"Auth falhou em {indice} — verifique DATAJUD_API_KEY")
-        if resp.status_code != 200:
-            return []
-        data = resp.json()
-        hits = data.get("hits", {}).get("hits", [])
-        return [h.get("_source", {}) for h in hits]
-    except Exception as e:
-        logger.warning(f"Erro consulta OAB em {indice}: {e}")
-        return []
-
-
-def consultar_por_oab(oab: str, tribunal: Optional[str] = None,
-                      max_workers: int = 5, timeout_total: int = 90) -> list[dict]:
-    uf, numero = _normalizar_oab(oab)
-    if not numero:
-        return []
-
-    if tribunal:
-        key = _normalizar_tribunal(tribunal)
-        indices = [TRIBUNAIS_INDICES.get(key)] if key else []
-    elif uf:
-        targets = UF_PARA_TRIBUNAIS.get(uf, []) + _TRIBUNAIS_SUPERIORES
-        indices = [TRIBUNAIS_INDICES[t] for t in targets if TRIBUNAIS_INDICES.get(t)]
-    else:
-        indices = list(TRIBUNAIS_INDICES.values())
-
-    indices = [i for i in indices if i]
-    if not indices:
-        return []
-
-    resultados = []
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        fut_map = {executor.submit(_consultar_oab_por_indice, idx, numero): idx for idx in indices}
-        try:
-            for future in as_completed(fut_map, timeout=timeout_total):
-                try:
-                    resultados.extend(future.result())
-                except Exception as e:
-                    logger.warning(f"Erro consulta OAB em {fut_map[future]}: {e}")
-        except TimeoutError:
-            logger.warning(f"Timeout na consulta OAB ({timeout_total}s)")
-
-    return resultados
