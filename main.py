@@ -222,6 +222,7 @@ async def salvar_config(
     notify_email: str = Form(""),
     telegram_bot_token: str = Form(""),
     telegram_chat_id: str = Form(""),
+    datajud_api_key: str = Form(""),
     intervalo: int = Form(24),
 ):
     session = get_session()
@@ -235,6 +236,7 @@ async def salvar_config(
             "notify_email": notify_email,
             "telegram_bot_token": telegram_bot_token,
             "telegram_chat_id": telegram_chat_id,
+            "datajud_api_key": datajud_api_key,
             "datajud_interval_hours": str(intervalo),
         }
         for key, value in updates.items():

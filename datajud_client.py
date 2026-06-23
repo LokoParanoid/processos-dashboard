@@ -1,15 +1,44 @@
 import hashlib
 import logging
+import os
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Optional
 
 import requests
 
-from database import get_session, Processo, Movimentacao
+from database import get_session, Processo, Movimentacao, Config
 
 logger = logging.getLogger(__name__)
+
+DATAJUD_API_KEY_PUBLICA = "cDZHYzlZa0JadVREZDJCendQbXY6SkJlTzNjLV9TRENyQk1RdnFKZGRQdw=="
+BASE_URL = "https://api-publica.datajud.cnj.jus.br"
+
+_ULTIMA_VERIFICACAO_API_KEY = 0
+
+
+def _get_api_key() -> str:
+    global _ULTIMA_VERIFICACAO_API_KEY
+    key = os.getenv("DATAJUD_API_KEY", "").strip()
+    if key:
+        return key
+    if time.time() - _ULTIMA_VERIFICACAO_API_KEY > 30:
+        try:
+            session = get_session()
+            cfg = session.query(Config).filter_by(key="datajud_api_key").first()
+            if cfg and cfg.value.strip():
+                key = cfg.value.strip()
+            session.close()
+        except Exception:
+            pass
+        _ULTIMA_VERIFICACAO_API_KEY = time.time()
+    return key or DATAJUD_API_KEY_PUBLICA
+
+
+def _get_headers() -> dict[str, str]:
+    return {"Authorization": f"APIKey {_get_api_key()}"}
 
 UF_PARA_TRIBUNAIS = {
     "AC": ["tjac"], "AL": ["tjal"], "AM": ["tjam"], "AP": ["tjap"],
@@ -82,9 +111,6 @@ TRIBUNAIS_INDICES = {
     "trt18": "api_publica_trt18",
 }
 
-BASE_URL = "https://api-publica.datajud.cnj.jus.br"
-
-
 def _normalizar_tribunal(tribunal: str) -> Optional[str]:
     t = tribunal.lower().strip().replace(" ", "").replace("-", "").replace("_", "")
     for key in TRIBUNAIS_INDICES:
@@ -134,7 +160,9 @@ def _consultar_por_indice(numero_cnj: str, indice: str) -> Optional[dict]:
     url = f"{BASE_URL}/{indice}/_search"
     params = {"q": f"numeroProcesso:{numero_cnj}"}
     try:
-        resp = requests.get(url, params=params, timeout=30)
+        resp = requests.get(url, params=params, headers=_get_headers(), timeout=30)
+        if resp.status_code == 401:
+            logger.error(f"Auth falhou em {indice} — verifique DATAJUD_API_KEY")
         if resp.status_code != 200:
             return None
         data = resp.json()
@@ -279,7 +307,9 @@ def _consultar_oab_por_indice(indice: str, numero_oab: str, timeout: int = 15) -
     url = f"{BASE_URL}/{indice}/_search"
     params = {"q": f"(advogados.numero_oab:{numero_oab} OR advogados.oab:{numero_oab})", "size": "50"}
     try:
-        resp = requests.get(url, params=params, timeout=timeout)
+        resp = requests.get(url, params=params, headers=_get_headers(), timeout=timeout)
+        if resp.status_code == 401:
+            logger.error(f"Auth falhou em {indice} — verifique DATAJUD_API_KEY")
         if resp.status_code != 200:
             return []
         data = resp.json()

@@ -101,6 +101,15 @@
 
                 <hr>
 
+                <h3 style="font-size:0.95rem;margin-bottom:12px;color:#1a1a2e;">🔑 API DataJud</h3>
+                <div class="form-group">
+                    <label>API Key do DataJud</label>
+                    <input type="text" name="datajud_api_key" value="{{ config.get('datajud_api_key', '') }}" style="font-family:monospace;font-size:0.8rem;">
+                    <div class="hint">Chave pública do CNJ. Obtenha em <a href="https://datajud-wiki.cnj.jus.br/api-publica/acesso/" target="_blank">datajud-wiki.cnj.jus.br</a>. Se vazio, usa a chave padrão.</div>
+                </div>
+
+                <hr>
+
                 <h3 style="font-size:0.95rem;margin-bottom:12px;color:#1a1a2e;">⏱ Consulta Automática</h3>
                 <div class="form-group">
                     <label>Intervalo entre consultas (horas)</label>

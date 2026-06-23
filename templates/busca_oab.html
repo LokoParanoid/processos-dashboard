@@ -64,9 +64,11 @@
 
         <div class="card">
             <h2>Buscar Processos por OAB</h2>
-            <p style="font-size:0.875rem;color:#666;margin-bottom:16px;">
-                Consulta a API DataJud do CNJ por número da OAB em todos os tribunais.
-            </p>
+            <div style="background:#fff3cd;color:#856404;padding:12px;border-radius:6px;font-size:0.8rem;margin-bottom:16px;">
+                <strong>⚠ Indisponível</strong> — A API DataJud não fornece mais dados de partes e advogados
+                devido à LGPD. A busca por OAB não retorna resultados.
+                Utilize a busca por número do processo no <a href="/" style="color:#0f3460;">Dashboard</a>.
+            </div>
             <form method="GET" action="/busca-oab">
                 <div class="row">
                     <div class="form-group">
