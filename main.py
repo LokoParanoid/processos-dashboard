@@ -2,6 +2,8 @@ import asyncio
 import logging
 import os
 import sys
+import threading
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -83,6 +85,39 @@ async def shutdown():
 
 
 ITENS_POR_PAGINA = 25
+
+_tasks: dict[str, dict] = {}
+
+
+def _criar_task(total: int) -> str:
+    task_id = str(uuid.uuid4())
+    _tasks[task_id] = {
+        "status": "running",
+        "current": 0,
+        "total": total,
+        "current_cnj": "",
+        "result": None,
+    }
+    return task_id
+
+
+def _executar_ciclo_com_task(task_id: str):
+    task = _tasks[task_id]
+
+    def on_progress(cnj: str, current: int, total: int):
+        task["current"] = current
+        task["total"] = total
+        task["current_cnj"] = cnj
+
+    try:
+        result = executar_ciclo_atualizacao(progress_callback=on_progress)
+        task["status"] = "done"
+        task["result"] = result
+    except Exception as e:
+        task["status"] = "error"
+        task["result"] = {"erro": str(e)}
+    finally:
+        _tasks[task_id] = task
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -226,9 +261,23 @@ async def importar_xlsx_view(file: UploadFile = File(...)):
 
 @app.post("/ciclo-atualizacao")
 async def disparar_ciclo():
-    loop = asyncio.get_event_loop()
-    resultado = await loop.run_in_executor(None, executar_ciclo_atualizacao)
-    return JSONResponse(resultado)
+    session = get_session()
+    try:
+        total = session.query(Processo).count()
+    finally:
+        session.close()
+    task_id = _criar_task(total)
+    thread = threading.Thread(target=_executar_ciclo_com_task, args=(task_id,), daemon=True)
+    thread.start()
+    return JSONResponse({"task_id": task_id})
+
+
+@app.get("/task/{task_id}/status")
+async def task_status(task_id: str):
+    task = _tasks.get(task_id)
+    if not task:
+        return JSONResponse({"status": "not_found"})
+    return JSONResponse(task)
 
 
 @app.get("/config", response_class=HTMLResponse)

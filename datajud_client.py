@@ -2,6 +2,7 @@ import hashlib
 import logging
 import os
 import re
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -15,6 +16,23 @@ logger = logging.getLogger(__name__)
 
 DATAJUD_API_KEY_PUBLICA = "cDZHYzlZa0JadVREZDJCendQbXY6SkJlTzNjLV9TRENyQk1RdnFKZGRQdw=="
 BASE_URL = "https://api-publica.datajud.cnj.jus.br"
+
+
+class _RateLimiter:
+    def __init__(self, min_interval: float = 2.0):
+        self._min_interval = min_interval
+        self._last_time = 0.0
+        self._lock = threading.Lock()
+
+    def acquire(self):
+        with self._lock:
+            elapsed = time.time() - self._last_time
+            if elapsed < self._min_interval:
+                time.sleep(self._min_interval - elapsed)
+            self._last_time = time.time()
+
+
+_RATE_LIMITER = _RateLimiter()
 
 _ULTIMA_VERIFICACAO_API_KEY = 0
 
@@ -194,20 +212,29 @@ def consultar_processo(numero_cnj: str, tribunal: Optional[str] = None) -> Optio
 def _consultar_por_indice(numero_cnj: str, indice: str, timeout: int = 30) -> Optional[dict]:
     url = f"{BASE_URL}/{indice}/_search"
     params = {"q": f"numeroProcesso:{numero_cnj}"}
-    try:
-        resp = requests.get(url, params=params, headers=_get_headers(), timeout=timeout)
-        if resp.status_code == 401:
-            logger.error(f"Auth falhou em {indice} — verifique DATAJUD_API_KEY")
-        if resp.status_code != 200:
+    tentativas = 0
+    while tentativas < 2:
+        _RATE_LIMITER.acquire()
+        try:
+            resp = requests.get(url, params=params, headers=_get_headers(), timeout=timeout)
+            if resp.status_code == 429:
+                tentativas += 1
+                logger.warning(f"HTTP 429 em {indice} para {numero_cnj}, esperando 60s (tentativa {tentativas}/2)")
+                time.sleep(60)
+                continue
+            if resp.status_code == 401:
+                logger.error(f"Auth falhou em {indice} — verifique DATAJUD_API_KEY")
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            hits = data.get("hits", {}).get("hits", [])
+            if not hits:
+                return None
+            return hits[0].get("_source", {})
+        except Exception as e:
+            logger.error(f"Erro ao consultar {indice} para {numero_cnj}: {e}")
             return None
-        data = resp.json()
-        hits = data.get("hits", {}).get("hits", [])
-        if not hits:
-            return None
-        return hits[0].get("_source", {})
-    except Exception as e:
-        logger.error(f"Erro ao consultar {indice} para {numero_cnj}: {e}")
-        return None
+    return None
 
 
 def _extrair_movimentacoes(source: dict) -> list[dict[str, object]]:

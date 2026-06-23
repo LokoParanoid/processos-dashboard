@@ -138,13 +138,7 @@
             <div class="actions">
                 <button class="btn btn-success" onclick="abrirModal('importar')">📥 Importar XLSX</button>
                 <button class="btn btn-primary" onclick="abrirModal('novo')">➕ Novo Processo</button>
-                <button class="btn btn-outline" id="btn-atualizar"
-                    hx-post="/ciclo-atualizacao"
-                    hx-trigger="click"
-                    hx-target="#toast"
-                    hx-swap="innerHTML"
-                    hx-on::before-request="document.getElementById('btn-atualizar').disabled=true;document.getElementById('btn-atualizar').innerHTML='⏳ Atualizando...'"
-                    hx-on::after-request="document.getElementById('btn-atualizar').disabled=false;document.getElementById('btn-atualizar').innerHTML='🔄 Atualizar Todos'">
+                <button class="btn btn-outline" id="btn-atualizar" onclick="iniciarAtualizacao()">
                     🔄 Atualizar Todos
                 </button>
                 <a href="/exportar/csv{{ '?' if busca or tribunal_filtro or status_filtro }}{{ 'busca=' ~ busca ~ '&' if busca }}{{ 'tribunal=' ~ tribunal_filtro ~ '&' if tribunal_filtro }}{{ 'status_filtro=' ~ status_filtro if status_filtro }}" class="btn btn-outline">📥 CSV</a>
@@ -188,6 +182,16 @@
             <button type="submit" class="btn btn-primary" onclick="window.scrollTo({top:0,behavior:'smooth'})">Filtrar</button>
             <a href="/" class="btn btn-outline" onclick="window.scrollTo({top:0,behavior:'smooth'})">Limpar</a>
         </form>
+
+        <div id="progress-area" style="display:none;background:white;border-radius:10px;padding:16px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:0.8rem;">
+                <span id="progress-text">Atualizando...</span>
+                <span id="progress-pct">0%</span>
+            </div>
+            <div style="background:#eee;border-radius:6px;height:10px;overflow:hidden;">
+                <div id="progress-bar" style="width:0%;background:#0f3460;height:100%;border-radius:6px;transition:width 0.3s;"></div>
+            </div>
+        </div>
 
         <div class="batch-bar" id="batch-bar">
             <span><strong class="count" id="batch-count">0</strong> processos selecionados</span>
@@ -376,6 +380,85 @@
         }
         function esconderLoading() {
             document.getElementById('loading-overlay').classList.remove('active');
+        }
+
+        var _taskId = null;
+        var _pollInterval = null;
+
+        function iniciarAtualizacao() {
+            var btn = document.getElementById('btn-atualizar');
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Atualizando...';
+            document.getElementById('progress-area').style.display = 'block';
+            document.getElementById('progress-bar').style.width = '0%';
+            document.getElementById('progress-text').textContent = 'Iniciando...';
+            document.getElementById('progress-pct').textContent = '0%';
+
+            fetch('/ciclo-atualizacao', { method: 'POST' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    _taskId = data.task_id;
+                    _pollInterval = setInterval(pollTask, 2000);
+                })
+                .catch(function(err) {
+                    showToast('❌ Erro ao iniciar atualização: ' + err, 'error');
+                    resetUpdateButton();
+                });
+        }
+
+        function pollTask() {
+            if (!_taskId) return;
+            fetch('/task/' + _taskId + '/status')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var total = data.total;
+                    var current = data.current;
+                    var pct = total > 0 ? Math.round(current / total * 100) : 0;
+                    document.getElementById('progress-bar').style.width = pct + '%';
+                    document.getElementById('progress-pct').textContent = pct + '%';
+                    if (data.current_cnj) {
+                        document.getElementById('progress-text').textContent = 'Atualizando ' + current + ' de ' + total + ' — ' + data.current_cnj;
+                    } else {
+                        document.getElementById('progress-text').textContent = 'Atualizando ' + current + ' de ' + total;
+                    }
+
+                    if (data.status === 'done') {
+                        clearInterval(_pollInterval);
+                        _pollInterval = null;
+                        var r = data.result || {};
+                        var msg = '✅ Ciclo concluído: ' + (r.ok || 0) + ' ok, ' + (r.erro || 0) + ' erros';
+                        if (r.novas > 0) msg += ', ' + r.novas + ' novas mov.';
+                        if (r.skipped > 0) msg += ', ' + r.skipped + ' ignorados';
+                        if (r.sem_dados > 0) msg += ', ' + r.sem_dados + ' sem dados';
+                        showToast(msg, 'success');
+                        resetUpdateButton();
+                        setTimeout(function() { location.reload(); }, 2000);
+                    } else if (data.status === 'error') {
+                        clearInterval(_pollInterval);
+                        _pollInterval = null;
+                        showToast('❌ Erro na atualização: ' + (data.result ? data.result.erro : 'desconhecido'), 'error');
+                        resetUpdateButton();
+                    }
+                })
+                .catch(function(err) {
+                    showToast('❌ Erro ao consultar progresso: ' + err, 'error');
+                });
+        }
+
+        function resetUpdateButton() {
+            var btn = document.getElementById('btn-atualizar');
+            btn.disabled = false;
+            btn.innerHTML = '🔄 Atualizar Todos';
+            document.getElementById('progress-area').style.display = 'none';
+            _taskId = null;
+        }
+
+        function showToast(msg, type) {
+            var toast = document.getElementById('toast');
+            toast.className = 'toast ' + (type || 'success');
+            toast.innerHTML = msg;
+            toast.style.display = 'block';
+            setTimeout(function() { toast.className = 'toast'; toast.innerHTML = ''; toast.style.display = 'none'; }, 5000);
         }
 
         document.body.addEventListener('htmx:beforeRequest', function(evt) {
