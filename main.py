@@ -492,6 +492,7 @@ async def relatorio_movimentacoes(request: Request, data_inicio: str = Query("")
         if tribunal:
             qs += f"tribunal={tribunal}"
         csv_url = f"/exportar/relatorio/movimentacoes/csv?{qs}" if (data_inicio or data_fim or tribunal) else ""
+        pdf_url = f"/exportar/relatorio/movimentacoes/pdf?{qs}" if (data_inicio or data_fim or tribunal) else ""
 
         return templates.TemplateResponse(request, "relatorio_movimentacoes.html", {
             "movimentacoes": movimentacoes,
@@ -500,6 +501,7 @@ async def relatorio_movimentacoes(request: Request, data_inicio: str = Query("")
             "data_fim": data_fim,
             "tribunal_filtro": tribunal,
             "csv_url": csv_url,
+            "pdf_url": pdf_url,
         })
     finally:
         session.close()
@@ -559,6 +561,7 @@ async def relatorio_parados(request: Request, dias: int = Query(90), tribunal: s
         if tribunal:
             qs += f"&tribunal={tribunal}"
         csv_url = f"/exportar/relatorio/parados/csv?{qs}"
+        pdf_url = f"/exportar/relatorio/parados/pdf?{qs}"
 
         return templates.TemplateResponse(request, "relatorio_parados.html", {
             "processos": processo_objects,
@@ -567,6 +570,7 @@ async def relatorio_parados(request: Request, dias: int = Query(90), tribunal: s
             "dias": dias,
             "tribunal_filtro": tribunal,
             "csv_url": csv_url,
+            "pdf_url": pdf_url,
         })
     finally:
         session.close()
@@ -685,6 +689,158 @@ async def exportar_relatorio_parados_csv(dias: int = Query(90), tribunal: str = 
             iter([output.getvalue()]),
             media_type="text/csv",
             headers={"Content-Disposition": "attachment; filename=processos-parados.csv"}
+        )
+    finally:
+        session.close()
+
+
+def _gerar_pdf_relatorio(title: str, headers: list[str], rows: list[list[str]], filename: str):
+    from fpdf import FPDF
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(0, 10, title, new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(4)
+    pdf.set_font("Helvetica", "I", 9)
+    pdf.cell(0, 6, "Gerado em " + datetime.now().strftime('%d/%m/%Y %H:%M'), new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(6)
+
+    col_w = max(15, min(50, 180 // len(headers))) if headers else 50
+    usable = 190
+    if col_w * len(headers) > usable:
+        col_w = usable // len(headers)
+
+    pdf.set_font("Helvetica", "B", 8)
+    pdf.set_fill_color(15, 52, 96)
+    pdf.set_text_color(255, 255, 255)
+    for h in headers:
+        pdf.cell(col_w, 7, h[:int(col_w / 2)], border=1, fill=True, align="C")
+    pdf.ln()
+
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Helvetica", "", 7)
+    for row in rows:
+        y_before = pdf.get_y()
+        if y_before > 260:
+            pdf.add_page()
+            pdf.set_font("Helvetica", "B", 8)
+            pdf.set_fill_color(15, 52, 96)
+            pdf.set_text_color(255, 255, 255)
+            for h in headers:
+                pdf.cell(col_w, 7, h[:int(col_w / 2)], border=1, fill=True, align="C")
+            pdf.ln()
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font("Helvetica", "", 7)
+        for cell_val in row:
+            text = str(cell_val)[:int(col_w / 1.8)]
+            pdf.cell(col_w, 7, text, border=1)
+        pdf.ln()
+
+    from fastapi.responses import StreamingResponse
+    import io
+    buf = io.BytesIO()
+    pdf.output(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+@app.get("/exportar/relatorio/movimentacoes/pdf")
+async def exportar_relatorio_movimentacoes_pdf(data_inicio: str = Query(""),
+                                                data_fim: str = Query(""),
+                                                tribunal: str = Query("")):
+    session = get_session()
+    try:
+        query = session.query(Movimentacao).join(Processo)
+        if data_inicio:
+            try:
+                di = datetime.strptime(data_inicio, "%Y-%m-%d")
+                query = query.filter(Movimentacao.data >= di)
+            except ValueError:
+                pass
+        if data_fim:
+            try:
+                df = datetime.strptime(data_fim, "%Y-%m-%d") + timedelta(days=1)
+                query = query.filter(Movimentacao.data < df)
+            except ValueError:
+                pass
+        if tribunal:
+            query = query.filter(Processo.tribunal == tribunal)
+        movs = query.order_by(Movimentacao.data.desc()).limit(500).all()
+        rows = []
+        for m in movs:
+            rows.append([
+                m.data.strftime("%d/%m/%Y %H:%M") if m.data else "",
+                m.processo.numero_cnj,
+                m.processo.tribunal or "",
+                (m.processo.parte_autora or "")[:30],
+                m.descricao[:60],
+            ])
+        return _gerar_pdf_relatorio(
+            "Movimentacoes por Periodo",
+            ["Data", "Processo", "Tribunal", "Parte Autora", "Descricao"],
+            rows,
+            "movimentacoes.pdf"
+        )
+    finally:
+        session.close()
+
+
+@app.get("/exportar/relatorio/tribunais/pdf")
+async def exportar_relatorio_tribunais_pdf():
+    session = get_session()
+    try:
+        processos = session.query(Processo).order_by(Processo.tribunal, Processo.numero_cnj).all()
+        rows = []
+        for p in processos:
+            rows.append([
+                p.tribunal or "N/I",
+                p.numero_cnj,
+                p.classe or "",
+                (p.parte_autora or "")[:30],
+                p.status or "",
+                p.ultima_movimentacao_data.strftime("%d/%m/%Y") if p.ultima_movimentacao_data else "",
+            ])
+        return _gerar_pdf_relatorio(
+            "Processos por Tribunal",
+            ["Tribunal", "CNJ", "Classe", "Parte Autora", "Status", "Ult. Mov."],
+            rows,
+            "processos-por-tribunal.pdf"
+        )
+    finally:
+        session.close()
+
+
+@app.get("/exportar/relatorio/parados/pdf")
+async def exportar_relatorio_parados_pdf(dias: int = Query(90), tribunal: str = Query("")):
+    session = get_session()
+    try:
+        query = session.query(Processo)
+        if tribunal:
+            query = query.filter(Processo.tribunal == tribunal)
+        todos = query.all()
+        agora = datetime.utcnow()
+        limite = agora - timedelta(days=dias)
+        rows = []
+        for p in todos:
+            if p.ultima_movimentacao_data is None:
+                dias_parado = (agora - p.created_at).days if p.created_at else 0
+                rows.append([p.numero_cnj, p.tribunal or "", (p.parte_autora or "")[:30],
+                             p.status or "ativo", "Nunca", str(dias_parado)])
+            elif p.ultima_movimentacao_data < limite:
+                dias_parado = (agora - p.ultima_movimentacao_data).days
+                rows.append([p.numero_cnj, p.tribunal or "", (p.parte_autora or "")[:30],
+                             p.status or "ativo",
+                             p.ultima_movimentacao_data.strftime("%d/%m/%Y"), str(dias_parado)])
+        rows.sort(key=lambda r: int(r[5]) if r[5].isdigit() else 0, reverse=True)
+        return _gerar_pdf_relatorio(
+            f"Processos sem Movimentacao ha {dias} dias",
+            ["CNJ", "Tribunal", "Parte Autora", "Status", "Ult. Mov.", "Dias Parado"],
+            rows,
+            "processos-parados.pdf"
         )
     finally:
         session.close()

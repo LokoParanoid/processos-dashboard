@@ -91,7 +91,8 @@
                 </div>
                 <button type="submit" class="btn btn-primary">Gerar Relatório</button>
                 {% if processos %}
-                <a href="{{ csv_url }}" class="btn btn-success">📥 Exportar CSV</a>
+                <a href="{{ csv_url }}" class="btn btn-success">📥 CSV</a>
+                <a href="{{ pdf_url }}" class="btn btn-danger" style="background:#e94560;color:white;">📄 PDF</a>
                 {% endif %}
             </form>
         </div>
