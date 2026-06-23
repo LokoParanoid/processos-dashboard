@@ -13,7 +13,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from dotenv import load_dotenv
 
 from database import init_db, get_session, Processo, Movimentacao, Config
-from datajud_client import atualizar_processo
+from datajud_client import atualizar_processo, extrair_tribunal_do_cnj
 from astrea_import import importar_xlsx
 from scheduler import iniciar as iniciar_scheduler, parar as parar_scheduler, executar_ciclo_atualizacao
 
@@ -277,6 +277,10 @@ async def criar_processo(
     assunto: str = Form(""),
     advogado_oab: str = Form(""),
 ):
+    if not tribunal:
+        tribunal_auto = extrair_tribunal_do_cnj(numero_cnj)
+        if tribunal_auto:
+            tribunal = tribunal_auto
     session = get_session()
     try:
         existe = session.query(Processo).filter_by(numero_cnj=numero_cnj).first()
