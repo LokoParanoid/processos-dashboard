@@ -24,6 +24,38 @@ def _extrair_cnj(texto: str) -> str:
     return ""
 
 
+MAPEAMENTO = {
+    "processo": ["processo", "número", "numero", "nº", "cnj", "num_cnj"],
+    "tribunal": ["tribunal", "orgao", "órgão", "vara", "comarca"],
+    "classe": ["classe", "classe_principal", "natureza"],
+    "assunto": ["assunto", "assunto_principal"],
+    "autora": ["autora", "autor", "requerente", "parte_ativa", "parte_autora"],
+    "re": ["reu", "ré", "requerido", "parte_passiva", "parte_re"],
+    "oab": ["oab", "advogado", "adv", "oab_advogado"],
+    "data_ajuizamento": ["data_ajuizamento", "data_distribuicao", "data_autuacao", "data"],
+}
+
+
+def _mapear_colunas(ws) -> dict:
+    colunas = {}
+    for cell in ws[1]:
+        colunas[cell.value] = cell.column
+
+    resultado = {}
+    for campo, aliases in MAPEAMENTO.items():
+        col_idx = None
+        for alias in aliases:
+            for col_nome, col_idx_candidate in colunas.items():
+                if col_nome and alias in str(col_nome).lower().strip():
+                    col_idx = col_idx_candidate
+                    break
+            if col_idx:
+                break
+        resultado[campo] = col_idx
+
+    return resultado, list(colunas.keys())
+
+
 def importar_xlsx(caminho: str) -> dict[str, object]:
     path = Path(caminho)
     if not path.exists():
@@ -32,67 +64,56 @@ def importar_xlsx(caminho: str) -> dict[str, object]:
     wb = load_workbook(path, read_only=True, data_only=True)
     ws = wb.active
 
-    colunas = {}
-    for cell in ws[1]:
-        colunas[cell.value] = cell.column
+    colunas_idx, colunas_planilha = _mapear_colunas(ws)
+    col_processo = colunas_idx["processo"]
 
-    mapeamento = {
-        "processo": ["processo", "número", "numero", "nº", "cnj", "num_cnj"],
-        "tribunal": ["tribunal", "orgao", "órgão", "vara", "comarca"],
-        "classe": ["classe", "classe_principal", "natureza"],
-        "assunto": ["assunto", "assunto_principal"],
-        "autora": ["autora", "autor", "requerente", "parte_ativa", "parte_autora"],
-        "re": ["reu", "ré", "requerido", "parte_passiva", "parte_re"],
-        "oab": ["oab", "advogado", "adv", "oab_advogado"],
-        "data_ajuizamento": ["data_ajuizamento", "data_distribuicao", "data_autuacao", "data"],
-    }
+    colunas_mapeadas = {}
+    for campo in MAPEAMENTO:
+        colunas_mapeadas[campo] = colunas_idx.get(campo) is not None
 
-    def _encontrar_coluna(alias_list: list[str]) -> int | None:
-        for alias in alias_list:
-            for col_nome, col_idx in colunas.items():
-                if col_nome and alias in str(col_nome).lower().strip():
-                    return col_idx
-        return None
-
-    col_processo = _encontrar_coluna(mapeamento["processo"])
-    col_tribunal = _encontrar_coluna(mapeamento["tribunal"])
-    col_classe = _encontrar_coluna(mapeamento["classe"])
-    col_assunto = _encontrar_coluna(mapeamento["assunto"])
-    col_autora = _encontrar_coluna(mapeamento["autora"])
-    col_re = _encontrar_coluna(mapeamento["re"])
-    col_oab = _encontrar_coluna(mapeamento["oab"])
-    col_data = _encontrar_coluna(mapeamento["data_ajuizamento"])
+    if col_processo is None:
+        wb.close()
+        return {
+            "status": "erro",
+            "mensagem": "Coluna 'Processo' (CNJ) não encontrada na planilha",
+            "colunas_planilha": colunas_planilha,
+            "colunas_mapeadas": colunas_mapeadas,
+            "dica": "Verifique se a planilha tem uma coluna com nome: processo, número, CNJ, num_cnj ou nº",
+        }
 
     session = get_session()
     importados = 0
     erros = 0
+    ja_existem = 0
+    sem_cnj = 0
+    erros_amostra = []
 
     for row in ws.iter_rows(min_row=2, values_only=False):
         try:
-            if col_processo is None:
-                continue
             valor = row[col_processo - 1].value
             if not valor:
                 continue
 
             cnj = _extrair_cnj(str(valor))
             if not cnj:
+                sem_cnj += 1
                 continue
 
             existe = session.query(Processo).filter_by(numero_cnj=cnj).first()
             if existe:
+                ja_existem += 1
                 continue
 
-            tribunal = row[col_tribunal - 1].value if col_tribunal else ""
-            classe = row[col_classe - 1].value if col_classe else ""
-            assunto = row[col_assunto - 1].value if col_assunto else ""
-            autora = row[col_autora - 1].value if col_autora else ""
-            reu = row[col_re - 1].value if col_re else ""
-            oab = row[col_oab - 1].value if col_oab else ""
+            tribunal = row[colunas_idx["tribunal"] - 1].value if colunas_idx["tribunal"] else ""
+            classe = row[colunas_idx["classe"] - 1].value if colunas_idx["classe"] else ""
+            assunto = row[colunas_idx["assunto"] - 1].value if colunas_idx["assunto"] else ""
+            autora = row[colunas_idx["autora"] - 1].value if colunas_idx["autora"] else ""
+            reu = row[colunas_idx["re"] - 1].value if colunas_idx["re"] else ""
+            oab = row[colunas_idx["oab"] - 1].value if colunas_idx["oab"] else ""
 
             data_ajuizamento = None
-            if col_data:
-                val_data = row[col_data - 1].value
+            if colunas_idx["data_ajuizamento"]:
+                val_data = row[colunas_idx["data_ajuizamento"] - 1].value
                 if val_data:
                     if isinstance(val_data, datetime):
                         data_ajuizamento = val_data
@@ -120,8 +141,24 @@ def importar_xlsx(caminho: str) -> dict[str, object]:
         except Exception as e:
             logger.error(f"Erro ao importar linha: {e}")
             erros += 1
+            if len(erros_amostra) < 3:
+                erros_amostra.append(str(e))
 
     session.commit()
     session.close()
     wb.close()
-    return {"status": "ok", "importados": importados, "erros": erros}
+
+    resultado: dict[str, object] = {
+        "status": "ok",
+        "importados": importados,
+        "erros": erros,
+        "ja_existem": ja_existem,
+        "sem_cnj": sem_cnj,
+        "colunas_planilha": colunas_planilha,
+        "colunas_mapeadas": colunas_mapeadas,
+    }
+    if erros_amostra:
+        resultado["erros_amostra"] = erros_amostra
+    if importados == 0 and erros == 0 and ja_existem == 0 and sem_cnj == 0:
+        resultado["mensagem"] = "Planilha vazia (nenhuma linha com dados encontrada)"
+    return resultado

@@ -190,7 +190,8 @@ async def importar_xlsx_view(file: UploadFile = File(...)):
     try:
         loop = asyncio.get_event_loop()
         resultado = await loop.run_in_executor(None, importar_xlsx, tmp_path)
-        return JSONResponse(resultado)
+        status_code = 422 if resultado.get("status") == "erro" else 200
+        return JSONResponse(resultado, status_code=status_code)
     finally:
         os.unlink(tmp_path)
 

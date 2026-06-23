@@ -289,13 +289,17 @@
                 Exporte seus processos no Astrea (Administração &gt; Escritório &gt; Manutenção de conta &gt; "clique aqui").
                 Você receberá um XLSX por email. Faça upload aqui.
             </p>
-            <form hx-post="/importar/xlsx" hx-target="#toast" hx-swap="innerHTML"
+            <p style="font-size:0.8rem;color:#999;margin-bottom:12px;">
+                Colunas esperadas: <strong>Processo</strong> (CNJ), Tribunal, Classe, Assunto, Autor, Ré, OAB, Data
+            </p>
+            <form hx-post="/importar/xlsx" hx-target="#resultado-importacao"
                   hx-encoding="multipart/form-data"
-                  hx-on::after-request="if(event.detail.successful) { fecharModal('importar'); setTimeout(() => location.reload(), 1000); }">
+                  hx-on::after-request="if(event.detail.successful) {  }">
                 <div class="form-group">
                     <label>Arquivo XLSX</label>
                     <input type="file" name="file" accept=".xlsx" required>
                 </div>
+                <div id="resultado-importacao" style="margin-top:12px;"></div>
                 <div class="form-actions">
                     <button type="button" class="btn btn-outline" onclick="fecharModal('importar')">Cancelar</button>
                     <button type="submit" class="btn btn-success">Importar</button>
@@ -318,20 +322,82 @@
                 if (e.target === this) this.classList.remove('active');
             });
         });
+        function montarResultadoImportacao(data) {
+            var html = '';
+            if (data.status === 'erro') {
+                html = '<div class="toast" style="display:block;background:#e94560;margin-bottom:12px;">❌ ' + data.mensagem + '</div>';
+                if (data.colunas_planilha && data.colunas_planilha.length) {
+                    html += '<div style="font-size:0.8rem;background:#f5f5f5;padding:8px;border-radius:6px;">';
+                    html += '<strong>Colunas encontradas na planilha:</strong><br>';
+                    for (var i = 0; i < data.colunas_planilha.length; i++) {
+                        var nome = data.colunas_planilha[i];
+                        html += '<span style="display:inline-block;background:#eee;padding:2px 6px;margin:2px;border-radius:4px;">' + (nome || '(vazia)') + '</span>';
+                    }
+                    html += '</div>';
+                }
+                if (data.dica) {
+                    html += '<p style="font-size:0.8rem;color:#666;margin-top:8px;">💡 ' + data.dica + '</p>';
+                }
+                document.getElementById('resultado-importacao').innerHTML = html;
+                return;
+            }
+            if (data.importados > 0 || data.erros > 0 || data.ja_existem > 0) {
+                html = '<div class="toast" style="display:block;background:#0f3460;margin-bottom:12px;">';
+                html += '✅ Importado: <strong>' + data.importados + '</strong> processos';
+                if (data.ja_existem) html += ' | ' + data.ja_existem + ' já existentes';
+                if (data.sem_cnj) html += ' | ' + data.sem_cnj + ' sem CNJ';
+                if (data.erros) html += ' | ❌ ' + data.erros + ' erros';
+                html += '</div>';
+                if (data.erros_amostra && data.erros_amostra.length) {
+                    html += '<div style="font-size:0.8rem;background:#fff3cd;padding:8px;border-radius:6px;margin-bottom:8px;">';
+                    html += '<strong>Erros:</strong><br>';
+                    for (var i = 0; i < data.erros_amostra.length; i++) {
+                        html += '• ' + data.erros_amostra[i] + '<br>';
+                    }
+                    html += '</div>';
+                }
+                if (data.colunas_mapeadas) {
+                    html += '<div style="font-size:0.8rem;color:#666;">';
+                    html += '<strong>Colunas mapeadas:</strong> ';
+                    var nomes = {processo:'Processo',tribunal:'Tribunal',classe:'Classe',assunto:'Assunto',autora:'Autora',re:'Ré',oab:'OAB',data_ajuizamento:'Data'};
+                    for (var chave in data.colunas_mapeadas) {
+                        var ok = data.colunas_mapeadas[chave];
+                        html += '<span style="display:inline-block;margin:2px 4px 2px 0;padding:1px 5px;border-radius:3px;font-size:0.75rem;background:' + (ok ? '#d4edda' : '#f8d7da') + ';">' + (ok ? '✓' : '✗') + ' ' + (nomes[chave] || chave) + '</span>';
+                    }
+                    html += '</div>';
+                }
+                html += '<div style="margin-top:8px;text-align:right;"><button class="btn btn-outline" onclick="fecharModal(\'importar\');setTimeout(function(){location.reload()},300);">Fechar</button></div>';
+                document.getElementById('resultado-importacao').innerHTML = html;
+            } else if (data.mensagem) {
+                html = '<div class="toast" style="display:block;background:#e94560;margin-bottom:12px;">❌ ' + data.mensagem + '</div>';
+                document.getElementById('resultado-importacao').innerHTML = html;
+            }
+        }
+
         document.body.addEventListener('htmx:afterRequest', function(evt) {
+            var target = evt.detail.target;
+            if (target && target.id === 'resultado-importacao') {
+                try {
+                    var data = JSON.parse(evt.detail.xhr.responseText);
+                    montarResultadoImportacao(data);
+                } catch(e) {}
+                return;
+            }
             const toast = document.getElementById('toast');
             if (toast.innerHTML) {
-                const data = JSON.parse(evt.detail.xhr.responseText);
-                if (data.status === 'ok' || data.importados > 0) {
-                    toast.className = 'toast success';
-                    toast.innerHTML = data.novas_movimentacoes !== undefined
-                        ? '✅ Atualizado: ' + data.novas_movimentacoes + ' nova(s) movimentação(ões)'
-                        : '✅ Importado: ' + (data.importados || 0) + ' processos' + (data.erros ? ', erros: ' + data.erros : '');
-                } else {
-                    toast.className = 'toast error';
-                    toast.innerHTML = '❌ ' + (data.mensagem || 'Erro ao processar');
-                }
-                setTimeout(() => { toast.className = 'toast'; toast.innerHTML = ''; }, 4000);
+                try {
+                    const data = JSON.parse(evt.detail.xhr.responseText);
+                    if (data.status === 'ok' || data.importados > 0) {
+                        toast.className = 'toast success';
+                        toast.innerHTML = data.novas_movimentacoes !== undefined
+                            ? '✅ Atualizado: ' + data.novas_movimentacoes + ' nova(s) movimentação(ões)'
+                            : '✅ Importado: ' + (data.importados || 0) + ' processos' + (data.erros ? ', erros: ' + data.erros : '');
+                    } else {
+                        toast.className = 'toast error';
+                        toast.innerHTML = '❌ ' + (data.mensagem || 'Erro ao processar');
+                    }
+                    setTimeout(() => { toast.className = 'toast'; toast.innerHTML = ''; }, 4000);
+                } catch(e) {}
             }
         });
     </script>
