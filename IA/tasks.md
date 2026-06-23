@@ -4,44 +4,44 @@
 
 ### 1.1 Auto-detectar tribunal pelo CNJ
 
-- [ ] **1.1.1** Criar `CODIGOS_TRIBUNAIS` em `datajud_client.py`
+- [x] **1.1.1** Criar `CODIGOS_TRIBUNAIS` em `datajud_client.py`
   - Dicionário com ~60 entries: `"0026": "TJSP"`, `"0401": "TRF1"`, etc.
   - Fonte: Tabela de Tribunais do CNJ
-- [ ] **1.1.2** Criar `extrair_tribunal_do_cnj(cnj: str) -> str | None` em `datajud_client.py`
+- [x] **1.1.2** Criar `extrair_tribunal_do_cnj(cnj: str) -> str | None` em `datajud_client.py`
   - Extrair grupo `XXXX` do CNJ (`\d{7}-\d{2}\.(\d{4})`)
   - Buscar no `CODIGOS_TRIBUNAIS`
-- [ ] **1.1.3** Atualizar `criar_processo()` em `main.py`
+- [x] **1.1.3** Atualizar `criar_processo()` em `main.py`
   - Se `tribunal` vazio, chamar `extrair_tribunal_do_cnj()`
   - Se encontrou, preencher `processo.tribunal`
-- [ ] **1.1.4** Atualizar modal "Novo Processo" em `templates/dashboard.html`
+- [x] **1.1.4** Atualizar modal "Novo Processo" em `templates/dashboard.html`
   - Remover `required` do campo tribunal
   - Adicionar texto "(opcional — detectado automaticamente pelo CNJ)"
 
 ### 1.2 Paralelismo na consulta por CNJ
 
-- [ ] **1.2.1** Extrair lógica de busca multi-tribunal para `_consultar_multiplos_tribunais(numero_cnj)`
+- [x] **1.2.1** Extrair lógica de busca multi-tribunal para `_consultar_multiplos_tribunais(numero_cnj)`
   - Separar da `consultar_processo()` atual
   - Manter compatibilidade: `consultar_processo()` chama a nova função
-- [ ] **1.2.2** Implementar busca paralela com `ThreadPoolExecutor(max_workers=3)`
+- [x] **1.2.2** Implementar busca paralela com `ThreadPoolExecutor(max_workers=3)`
   - Primeiro lote: `_TRIBUNAIS_PRIORIDADE` (5 tribunais)
   - Segundo lote (fallback): demais tribunais (se primeiro lote não achou)
   - Usar `as_completed()` para pegar primeiro resultado
-- [ ] **1.2.3** Adicionar timeout total (`timeout_total=60`) no `as_completed()`
+- [x] **1.2.3** Adicionar timeout total (`timeout_total=60`) no `as_completed()`
   - Log warning se timeout estourar
-- [ ] **1.2.4** Integrar `extrair_tribunal_do_cnj()` em `consultar_processo()`
+- [x] **1.2.4** Integrar `extrair_tribunal_do_cnj()` em `consultar_processo()`
   - Se tribunal extraído do CNJ, buscar direto naquele índice
   - Se não achar, cair no fluxo paralelo de fallback
-- [ ] **1.2.5** Atualizar `_consultar_por_indice()` com timeout reduzido (15s em vez de 30s quando em lote)
+- [x] **1.2.5** Atualizar `_consultar_por_indice()` com timeout reduzido (15s em vez de 30s quando em lote)
 
 ### 1.3 Testes e integração
 
-- [ ] **1.3.1** Testar extração de tribunal do CNJ com múltiplos formatos
-- [ ] **1.3.2** Testar busca paralela (com API Key)
-- [ ] **1.3.3** Testar cadastro sem tribunal (auto-detecção)
-- [ ] **1.3.4** Testar cadastro com tribunal explícito (mantém compatibilidade)
-- [ ] **1.3.5** Rodar sintaxe completa (`py_compile` em todos os .py)
-- [ ] **1.3.6** Rodar servidor e testar endpoints principais (/, /config, /processo/novo)
-- [ ] **1.3.7** Commit + push
+- [x] **1.3.1** Testar extração de tribunal do CNJ com múltiplos formatos
+- [x] **1.3.2** Testar busca paralela (com API Key)
+- [x] **1.3.3** Testar cadastro sem tribunal (auto-detecção)
+- [x] **1.3.4** Testar cadastro com tribunal explícito (mantém compatibilidade)
+- [x] **1.3.5** Rodar sintaxe completa (`py_compile` em todos os .py)
+- [x] **1.3.6** Rodar servidor e testar endpoints principais (/, /config, /processo/novo)
+- [x] **1.3.7** Commit + push
 
 ---
 
