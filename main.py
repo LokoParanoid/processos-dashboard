@@ -452,4 +452,242 @@ async def exportar_csv(busca: str = Query(""), tribunal: str = Query(""),
         session.close()
 
 
+@app.get("/relatorios", response_class=HTMLResponse)
+async def relatorios_page(request: Request):
+    return templates.TemplateResponse(request, "relatorios.html", {})
+
+
+@app.get("/relatorios/movimentacoes", response_class=HTMLResponse)
+async def relatorio_movimentacoes(request: Request, data_inicio: str = Query(""),
+                                   data_fim: str = Query(""), tribunal: str = Query("")):
+    session = get_session()
+    try:
+        tribunais_lista = session.query(Processo.tribunal).distinct().order_by(Processo.tribunal).all()
+        tribunais = [t[0] for t in tribunais_lista if t[0]]
+
+        movimentacoes = []
+        if data_inicio or data_fim:
+            query = session.query(Movimentacao).join(Processo)
+            if data_inicio:
+                try:
+                    di = datetime.strptime(data_inicio, "%Y-%m-%d")
+                    query = query.filter(Movimentacao.data >= di)
+                except ValueError:
+                    pass
+            if data_fim:
+                try:
+                    df = datetime.strptime(data_fim, "%Y-%m-%d") + timedelta(days=1)
+                    query = query.filter(Movimentacao.data < df)
+                except ValueError:
+                    pass
+            if tribunal:
+                query = query.filter(Processo.tribunal == tribunal)
+            movimentacoes = query.order_by(Movimentacao.data.desc()).limit(500).all()
+
+        qs = ""
+        if data_inicio:
+            qs += f"data_inicio={data_inicio}&"
+        if data_fim:
+            qs += f"data_fim={data_fim}&"
+        if tribunal:
+            qs += f"tribunal={tribunal}"
+        csv_url = f"/exportar/relatorio/movimentacoes/csv?{qs}" if (data_inicio or data_fim or tribunal) else ""
+
+        return templates.TemplateResponse(request, "relatorio_movimentacoes.html", {
+            "movimentacoes": movimentacoes,
+            "tribunais": tribunais,
+            "data_inicio": data_inicio,
+            "data_fim": data_fim,
+            "tribunal_filtro": tribunal,
+            "csv_url": csv_url,
+        })
+    finally:
+        session.close()
+
+
+@app.get("/relatorios/tribunais", response_class=HTMLResponse)
+async def relatorio_tribunais(request: Request):
+    session = get_session()
+    try:
+        processos = session.query(Processo).order_by(Processo.tribunal, Processo.numero_cnj).all()
+        grupos = {}
+        for p in processos:
+            key = p.tribunal or "N/I"
+            if key not in grupos:
+                grupos[key] = []
+            grupos[key].append(p)
+        grupos_list = [{"tribunal": k, "processos": v} for k, v in sorted(grupos.items())]
+        total = len(processos)
+        return templates.TemplateResponse(request, "relatorio_tribunais.html", {
+            "grupos": grupos_list,
+            "total": total,
+        })
+    finally:
+        session.close()
+
+
+@app.get("/relatorios/parados", response_class=HTMLResponse)
+async def relatorio_parados(request: Request, dias: int = Query(90), tribunal: str = Query("")):
+    session = get_session()
+    try:
+        tribunais_lista = session.query(Processo.tribunal).distinct().order_by(Processo.tribunal).all()
+        tribunais = [t[0] for t in tribunais_lista if t[0]]
+
+        processo_objects = []
+        processos_sem_mov = 0
+        if dias > 0:
+            query = session.query(Processo)
+            if tribunal:
+                query = query.filter(Processo.tribunal == tribunal)
+
+            todos = query.all()
+            agora = datetime.utcnow()
+            limite = agora - timedelta(days=dias)
+
+            for p in todos:
+                if p.ultima_movimentacao_data is None:
+                    p._dias_parado = (agora - p.created_at).days if p.created_at else 0
+                    processo_objects.append(p)
+                    processos_sem_mov += 1
+                elif p.ultima_movimentacao_data < limite:
+                    p._dias_parado = (agora - p.ultima_movimentacao_data).days
+                    processo_objects.append(p)
+
+            processo_objects.sort(key=lambda x: x._dias_parado if x._dias_parado else 0, reverse=True)
+
+        qs = f"dias={dias}"
+        if tribunal:
+            qs += f"&tribunal={tribunal}"
+        csv_url = f"/exportar/relatorio/parados/csv?{qs}"
+
+        return templates.TemplateResponse(request, "relatorio_parados.html", {
+            "processos": processo_objects,
+            "processos_sem_mov": processos_sem_mov,
+            "tribunais": tribunais,
+            "dias": dias,
+            "tribunal_filtro": tribunal,
+            "csv_url": csv_url,
+        })
+    finally:
+        session.close()
+
+
+@app.get("/exportar/relatorio/movimentacoes/csv")
+async def exportar_relatorio_movimentacoes_csv(data_inicio: str = Query(""),
+                                                data_fim: str = Query(""),
+                                                tribunal: str = Query("")):
+    import csv
+    import io
+    session = get_session()
+    try:
+        query = session.query(Movimentacao).join(Processo)
+        if data_inicio:
+            try:
+                di = datetime.strptime(data_inicio, "%Y-%m-%d")
+                query = query.filter(Movimentacao.data >= di)
+            except ValueError:
+                pass
+        if data_fim:
+            try:
+                df = datetime.strptime(data_fim, "%Y-%m-%d") + timedelta(days=1)
+                query = query.filter(Movimentacao.data < df)
+            except ValueError:
+                pass
+        if tribunal:
+            query = query.filter(Processo.tribunal == tribunal)
+
+        movs = query.order_by(Movimentacao.data.desc()).limit(10000).all()
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Data", "Processo", "Tribunal", "Parte Autora", "Parte Ré", "Descrição"])
+        for m in movs:
+            writer.writerow([
+                m.data.strftime("%d/%m/%Y %H:%M") if m.data else "",
+                m.processo.numero_cnj,
+                m.processo.tribunal or "",
+                m.processo.parte_autora or "",
+                m.processo.parte_re or "",
+                m.descricao,
+            ])
+        from fastapi.responses import StreamingResponse
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=movimentacoes.csv"}
+        )
+    finally:
+        session.close()
+
+
+@app.get("/exportar/relatorio/tribunais/csv")
+async def exportar_relatorio_tribunais_csv():
+    import csv
+    import io
+    session = get_session()
+    try:
+        processos = session.query(Processo).order_by(Processo.tribunal, Processo.numero_cnj).all()
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Tribunal", "CNJ", "Classe", "Parte Autora", "Parte Ré", "Status", "Últ. Movimentação"])
+        for p in processos:
+            writer.writerow([
+                p.tribunal or "N/I",
+                p.numero_cnj,
+                p.classe or "",
+                p.parte_autora or "",
+                p.parte_re or "",
+                p.status or "",
+                p.ultima_movimentacao_data.strftime("%d/%m/%Y") if p.ultima_movimentacao_data else "",
+            ])
+        from fastapi.responses import StreamingResponse
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=processos-por-tribunal.csv"}
+        )
+    finally:
+        session.close()
+
+
+@app.get("/exportar/relatorio/parados/csv")
+async def exportar_relatorio_parados_csv(dias: int = Query(90), tribunal: str = Query("")):
+    import csv
+    import io
+    session = get_session()
+    try:
+        query = session.query(Processo)
+        if tribunal:
+            query = query.filter(Processo.tribunal == tribunal)
+        todos = query.all()
+        agora = datetime.utcnow()
+        limite = agora - timedelta(days=dias)
+        filtrados = []
+        for p in todos:
+            if p.ultima_movimentacao_data is None or p.ultima_movimentacao_data < limite:
+                filtrados.append(p)
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["CNJ", "Tribunal", "Parte Autora", "Parte Ré", "Status", "Últ. Movimentação", "Dias Parado"])
+        for p in filtrados:
+            dias_parado = (agora - (p.ultima_movimentacao_data or p.created_at or agora)).days
+            writer.writerow([
+                p.numero_cnj,
+                p.tribunal or "",
+                p.parte_autora or "",
+                p.parte_re or "",
+                p.status or "",
+                p.ultima_movimentacao_data.strftime("%d/%m/%Y") if p.ultima_movimentacao_data else "",
+                dias_parado,
+            ])
+        from fastapi.responses import StreamingResponse
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=processos-parados.csv"}
+        )
+    finally:
+        session.close()
+
+
 

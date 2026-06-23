@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatórios - Processos Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f0f2f5; color: #1a1a2e; padding: 20px;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+        .back { margin-bottom: 16px; }
+        .back a { color: #0f3460; text-decoration: none; font-size: 0.875rem; }
+        .back a:hover { text-decoration: underline; }
+        header { margin-bottom: 24px; }
+        header h1 { font-size: 1.5rem; color: #1a1a2e; }
+        header h1 span { color: #e94560; }
+        .grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+        }
+        .card {
+            background: white; border-radius: 10px; padding: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            text-decoration: none; color: inherit;
+            display: block; transition: transform 0.15s, box-shadow 0.15s;
+        }
+        .card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+        .card .icon { font-size: 2rem; margin-bottom: 12px; }
+        .card h2 { font-size: 1.1rem; margin-bottom: 8px; color: #0f3460; }
+        .card p { font-size: 0.85rem; color: #666; line-height: 1.4; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="back"><a href="/">← Voltar ao Dashboard</a></div>
+        <header>
+            <h1>📊 <span>Relatórios</span></h1>
+            <p style="color:#666;margin-top:4px;font-size:0.9rem;">Exporte e visualize dados dos seus processos</p>
+        </header>
+
+        <div class="grid">
+            <a href="/relatorios/movimentacoes" class="card">
+                <div class="icon">📅</div>
+                <h2>Movimentações por Período</h2>
+                <p>Lista todas as movimentações em um intervalo de datas. Ideal para anexar a petições ou controle mensal.</p>
+            </a>
+
+            <a href="/relatorios/tribunais" class="card">
+                <div class="icon">🏛</div>
+                <h2>Processos por Tribunal</h2>
+                <p>Agrupamento de processos por tribunal com contagem e detalhes. Exportável em CSV.</p>
+            </a>
+
+            <a href="/relatorios/parados" class="card">
+                <div class="icon">⏸</div>
+                <h2>Processos sem Movimentação</h2>
+                <p>Processos parados há mais de N dias (configurável). Útil para identificar providências necessárias.</p>
+            </a>
+
+            <a href="/exportar/csv" class="card">
+                <div class="icon">📥</div>
+                <h2>Exportar CSV Completo</h2>
+                <p>Exportação padrão de todos os processos com filtros atuais do dashboard.</p>
+            </a>
+        </div>
+    </div>
+</body>
+</html>

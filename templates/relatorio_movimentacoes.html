@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movimentações por Período - Relatórios</title>
+    <script src="/static/htmx.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f0f2f5; color: #1a1a2e; padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .back { margin-bottom: 16px; }
+        .back a { color: #0f3460; text-decoration: none; font-size: 0.875rem; }
+        .back a:hover { text-decoration: underline; }
+        header { margin-bottom: 20px; }
+        header h1 { font-size: 1.4rem; }
+        header h1 span { color: #e94560; }
+        .card {
+            background: white; border-radius: 10px; padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 16px;
+        }
+        .card h2 { font-size: 1.1rem; margin-bottom: 16px; color: #0f3460; }
+        .form-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+        .form-group { display: flex; flex-direction: column; gap: 4px; }
+        .form-group label { font-size: 0.8rem; color: #666; }
+        .form-group input, .form-group select {
+            padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.875rem;
+        }
+        .btn {
+            padding: 8px 16px; border: none; border-radius: 6px;
+            cursor: pointer; font-size: 0.875rem; text-decoration: none;
+            display: inline-flex; align-items: center; gap: 4px;
+        }
+        .btn-primary { background: #1a1a2e; color: white; }
+        .btn-primary:hover { background: #16213e; }
+        .btn-outline { background: transparent; border: 1px solid #ccc; color: #333; }
+        .btn-outline:hover { background: #eee; }
+        .btn-success { background: #0f3460; color: white; }
+        .btn-success:hover { background: #0c2a4e; }
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            text-align: left; padding: 10px 12px; font-size: 0.75rem;
+            text-transform: uppercase; color: #666; background: #f8f9fa;
+            border-bottom: 2px solid #eee; white-space: nowrap;
+        }
+        td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-size: 0.85rem; }
+        tr:hover { background: #f8f9ff; }
+        .cnj { font-family: monospace; font-size: 0.8rem; color: #0f3460; }
+        .data-cell { white-space: nowrap; font-size: 0.8rem; color: #666; }
+        .empty { padding: 40px; text-align: center; color: #999; }
+        .total-bar {
+            background: #e8ecf1; border-radius: 8px; padding: 10px 16px;
+            margin-bottom: 12px; font-size: 0.875rem; display: flex;
+            justify-content: space-between; align-items: center;
+        }
+        .total-bar .count { font-weight: 600; color: #0f3460; }
+        .info-note { font-size: 0.8rem; color: #999; margin-top: 8px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="back"><a href="/relatorios">← Relatórios</a></div>
+        <header>
+            <h1>📅 <span>Movimentações por Período</span></h1>
+        </header>
+
+        <div class="card">
+            <h2>Filtros</h2>
+            <form class="form-row" method="GET" action="/relatorios/movimentacoes">
+                <div class="form-group">
+                    <label>Data Início</label>
+                    <input type="date" name="data_inicio" value="{{ data_inicio }}">
+                </div>
+                <div class="form-group">
+                    <label>Data Fim</label>
+                    <input type="date" name="data_fim" value="{{ data_fim }}">
+                </div>
+                <div class="form-group">
+                    <label>Tribunal</label>
+                    <select name="tribunal">
+                        <option value="">Todos</option>
+                        {% for t in tribunais %}
+                        <option value="{{ t }}" {% if tribunal_filtro == t %}selected{% endif %}>{{ t }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Gerar Relatório</button>
+                {% if movimentacoes %}
+                <a href="{{ csv_url }}" class="btn btn-success">📥 Exportar CSV</a>
+                {% endif %}
+            </form>
+        </div>
+
+        {% if movimentacoes %}
+        <div class="card">
+            <h2>Resultado</h2>
+            <div class="total-bar">
+                <span><strong class="count">{{ movimentacoes|length }}</strong> movimentação(ões) encontrada(s)</span>
+                <span style="font-size:0.8rem;color:#666;">{{ data_inicio or '—' }} a {{ data_fim or '—' }}</span>
+            </div>
+            {% if movimentacoes %}
+            <div style="overflow-x:auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Data</th>
+                            <th>Processo</th>
+                            <th>Tribunal</th>
+                            <th>Partes</th>
+                            <th>Descrição</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in movimentacoes %}
+                        <tr>
+                            <td class="data-cell">{{ m.data.strftime('%d/%m/%Y %H:%M') }}</td>
+                            <td><a href="/processo/{{ m.processo.id }}" class="cnj">{{ m.processo.numero_cnj }}</a></td>
+                            <td><span style="font-size:0.8rem;">{{ m.processo.tribunal or 'N/I' }}</span></td>
+                            <td style="font-size:0.8rem;max-width:200px;">
+                                {% if m.processo.parte_autora %}<div><strong>A:</strong> {{ m.processo.parte_autora }}</div>{% endif %}
+                                {% if m.processo.parte_re %}<div><strong>R:</strong> {{ m.processo.parte_re }}</div>{% endif %}
+                            </td>
+                            <td style="font-size:0.8rem;max-width:350px;">{{ m.descricao }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty">Nenhuma movimentação encontrada no período.</div>
+            {% endif %}
+        </div>
+        {% elif data_inicio or data_fim %}
+        <div class="card">
+            <div class="empty">Nenhuma movimentação encontrada para os filtros informados.</div>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

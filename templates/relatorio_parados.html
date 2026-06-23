@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Processos sem Movimentação - Relatórios</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f0f2f5; color: #1a1a2e; padding: 20px;
+        }
+        .container { max-width: 1100px; margin: 0 auto; }
+        .back { margin-bottom: 16px; }
+        .back a { color: #0f3460; text-decoration: none; font-size: 0.875rem; }
+        .back a:hover { text-decoration: underline; }
+        header { margin-bottom: 20px; }
+        header h1 { font-size: 1.4rem; }
+        header h1 span { color: #e94560; }
+        .card {
+            background: white; border-radius: 10px; padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 16px;
+        }
+        .card h2 { font-size: 1.1rem; margin-bottom: 16px; color: #0f3460; }
+        .form-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+        .form-group { display: flex; flex-direction: column; gap: 4px; }
+        .form-group label { font-size: 0.8rem; color: #666; }
+        .form-group input, .form-group select {
+            padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.875rem;
+        }
+        .btn {
+            padding: 8px 16px; border: none; border-radius: 6px;
+            cursor: pointer; font-size: 0.875rem; text-decoration: none;
+            display: inline-flex; align-items: center; gap: 4px;
+        }
+        .btn-primary { background: #1a1a2e; color: white; }
+        .btn-primary:hover { background: #16213e; }
+        .btn-outline { background: transparent; border: 1px solid #ccc; color: #333; }
+        .btn-outline:hover { background: #eee; }
+        .btn-success { background: #0f3460; color: white; }
+        .btn-success:hover { background: #0c2a4e; }
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            text-align: left; padding: 10px 12px; font-size: 0.75rem;
+            text-transform: uppercase; color: #666; background: #f8f9fa;
+            border-bottom: 2px solid #eee; white-space: nowrap;
+        }
+        td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-size: 0.85rem; }
+        tr:hover { background: #f8f9ff; }
+        .cnj { font-family: monospace; font-size: 0.8rem; color: #0f3460; }
+        .data-cell { white-space: nowrap; font-size: 0.8rem; color: #666; }
+        .empty { padding: 40px; text-align: center; color: #999; }
+        .total-bar {
+            background: #e8ecf1; border-radius: 8px; padding: 10px 16px;
+            margin-bottom: 12px; font-size: 0.875rem; display: flex;
+            justify-content: space-between; align-items: center;
+        }
+        .total-bar .count { font-weight: 600; color: #0f3460; }
+        .warning-note {
+            background: #fff3cd; border-radius: 8px; padding: 10px 16px;
+            font-size: 0.85rem; margin-bottom: 16px;
+        }
+        .danger-note {
+            background: #f8d7da; border-radius: 8px; padding: 10px 16px;
+            font-size: 0.85rem; margin-bottom: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="back"><a href="/relatorios">← Relatórios</a></div>
+        <header>
+            <h1>⏸ <span>Processos sem Movimentação Recente</span></h1>
+        </header>
+
+        <div class="card">
+            <h2>Filtros</h2>
+            <form class="form-row" method="GET" action="/relatorios/parados">
+                <div class="form-group">
+                    <label>Dias sem movimentação</label>
+                    <input type="number" name="dias" value="{{ dias }}" min="1" style="width:100px;">
+                </div>
+                <div class="form-group">
+                    <label>Tribunal</label>
+                    <select name="tribunal">
+                        <option value="">Todos</option>
+                        {% for t in tribunais %}
+                        <option value="{{ t }}" {% if tribunal_filtro == t %}selected{% endif %}>{{ t }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Gerar Relatório</button>
+                {% if processos %}
+                <a href="{{ csv_url }}" class="btn btn-success">📥 Exportar CSV</a>
+                {% endif %}
+            </form>
+        </div>
+
+        {% if processos is not none %}
+        <div class="card">
+            <h2>Resultado</h2>
+            <div class="total-bar">
+                <span><strong class="count">{{ processos|length }}</strong> processo(s) sem movimentação há mais de <strong>{{ dias }}</strong> dia(s)</span>
+            </div>
+
+            {% if processos_sem_mov > 0 %}
+            <div class="warning-note">
+                ⚠️ {{ processos_sem_mov }} processo(s) nunca tiveram movimentação registrada.
+            </div>
+            {% endif %}
+
+            {% if processos %}
+            <div style="overflow-x:auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Processo</th>
+                            <th>Tribunal</th>
+                            <th>Partes</th>
+                            <th>Status</th>
+                            <th>Últ. Movimentação</th>
+                            <th>Dias Parado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in processos %}
+                        <tr>
+                            <td><a href="/processo/{{ p.id }}" class="cnj">{{ p.numero_cnj }}</a></td>
+                            <td><span style="font-size:0.8rem;">{{ p.tribunal or 'N/I' }}</span></td>
+                            <td style="font-size:0.8rem;max-width:200px;">
+                                {% if p.parte_autora %}<div><strong>A:</strong> {{ p.parte_autora }}</div>{% endif %}
+                                {% if p.parte_re %}<div><strong>R:</strong> {{ p.parte_re }}</div>{% endif %}
+                            </td>
+                            <td><span style="font-size:0.8rem;">{{ p.status or 'ativo' }}</span></td>
+                            <td class="data-cell">{{ p.ultima_movimentacao_data.strftime('%d/%m/%Y') if p.ultima_movimentacao_data else 'Nunca' }}</td>
+                            <td class="data-cell" style="{% if p._dias_parado > 90 %}color:#e94560;font-weight:600;{% elif p._dias_parado > 30 %}color:#e65100;{% endif %}">
+                                {% if p._dias_parado > 0 %}{{ p._dias_parado }} dia(s){% else %}—{% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty">Nenhum processo encontrado com os critérios informados.</div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Processos por Tribunal - Relatórios</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f0f2f5; color: #1a1a2e; padding: 20px;
+        }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .back { margin-bottom: 16px; }
+        .back a { color: #0f3460; text-decoration: none; font-size: 0.875rem; }
+        .back a:hover { text-decoration: underline; }
+        header { margin-bottom: 20px; }
+        header h1 { font-size: 1.4rem; }
+        header h1 span { color: #e94560; }
+        .card {
+            background: white; border-radius: 10px; padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 16px;
+        }
+        .card h2 { font-size: 1.1rem; margin-bottom: 12px; color: #0f3460; }
+        .tribunal-header {
+            background: #f8f9fa; border-radius: 8px; padding: 12px 16px;
+            margin-bottom: 12px; cursor: pointer; display: flex;
+            justify-content: space-between; align-items: center;
+            font-weight: 600;
+        }
+        .tribunal-header .count {
+            background: #0f3460; color: white; padding: 2px 10px;
+            border-radius: 12px; font-size: 0.8rem;
+        }
+        .tribunal-content { padding-left: 8px; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            text-align: left; padding: 8px 12px; font-size: 0.75rem;
+            text-transform: uppercase; color: #666; background: #f8f9fa;
+            border-bottom: 2px solid #eee;
+        }
+        td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-size: 0.85rem; }
+        .cnj { font-family: monospace; font-size: 0.8rem; color: #0f3460; }
+        .data-cell { white-space: nowrap; font-size: 0.8rem; color: #666; }
+        .empty { padding: 30px; text-align: center; color: #999; }
+        .total-bar {
+            background: #e8ecf1; border-radius: 8px; padding: 10px 16px;
+            margin-bottom: 16px; font-size: 0.875rem;
+        }
+        .btn {
+            padding: 8px 16px; border: none; border-radius: 6px;
+            cursor: pointer; font-size: 0.875rem; text-decoration: none;
+            display: inline-flex; align-items: center; gap: 4px;
+        }
+        .btn-success { background: #0f3460; color: white; }
+        .btn-success:hover { background: #0c2a4e; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="back"><a href="/relatorios">← Relatórios</a></div>
+        <header>
+            <h1>🏛 <span>Processos por Tribunal</span></h1>
+        </header>
+
+        <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                <h2>Distribuição</h2>
+                <a href="/exportar/relatorio/tribunais/csv" class="btn btn-success">📥 Exportar CSV</a>
+            </div>
+
+            <div class="total-bar">
+                <strong>{{ total }}</strong> processos em <strong>{{ grupos|length }}</strong> tribunal(is)
+            </div>
+
+            {% if grupos %}
+            {% for g in grupos %}
+            <div class="tribunal-header">
+                <span>{{ g.tribunal or 'N/I' }}</span>
+                <span class="count">{{ g.processos|length }}</span>
+            </div>
+            <div class="tribunal-content">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Processo</th>
+                            <th>Classes</th>
+                            <th>Partes</th>
+                            <th>Status</th>
+                            <th>Últ. Mov.</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in g.processos %}
+                        <tr>
+                            <td><a href="/processo/{{ p.id }}" class="cnj">{{ p.numero_cnj }}</a></td>
+                            <td style="font-size:0.8rem;">{{ p.classe or '-' }}</td>
+                            <td style="font-size:0.8rem;max-width:200px;">
+                                <div><strong>A:</strong> {{ p.parte_autora or '-' }}</div>
+                                <div><strong>R:</strong> {{ p.parte_re or '-' }}</div>
+                            </td>
+                            <td><span style="font-size:0.8rem;">{{ p.status or 'ativo' }}</span></td>
+                            <td class="data-cell">{{ p.ultima_movimentacao_data.strftime('%d/%m/%Y') if p.ultima_movimentacao_data else '-' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="empty">Nenhum processo cadastrado.</div>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>
