@@ -1,5 +1,6 @@
 import logging
 import re
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -335,21 +336,19 @@ def importar_xlsx(caminho: str) -> dict[str, object]:
         resultado.setdefault("formato", "tabular")
         resultado.setdefault("colunas_mapeadas", {})
 
-        atualizados_datajud = 0
-        erros_datajud = 0
         cnjs_datajud = resultado.get("importados_cnjs", [])
-        for cnj in cnjs_datajud:
-            try:
-                r = atualizar_processo(cnj)
-                if r.get("status") == "ok":
-                    atualizados_datajud += 1
-                else:
-                    erros_datajud += 1
-            except Exception:
-                erros_datajud += 1
-        resultado["atualizados_datajud"] = atualizados_datajud
-        if erros_datajud:
-            resultado["erros_datajud"] = erros_datajud
+        if cnjs_datajud:
+            resultado["datajud_agendados"] = len(cnjs_datajud)
+
+            def _rodar_datajud_em_background():
+                for cnj in cnjs_datajud:
+                    try:
+                        atualizar_processo(cnj)
+                    except Exception:
+                        pass
+
+            t = threading.Thread(target=_rodar_datajud_em_background, daemon=True)
+            t.start()
 
         return resultado
     finally:

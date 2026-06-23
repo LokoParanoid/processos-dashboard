@@ -352,7 +352,7 @@
             <form hx-post="/importar/xlsx" hx-target="#resultado-importacao"
                   hx-encoding="multipart/form-data"
                   hx-on::before-request="document.getElementById('btn-importar-submit').disabled=true;document.getElementById('btn-importar-submit').innerHTML='⏳ Importando...'"
-                  hx-on::after-request="document.getElementById('btn-importar-submit').disabled=false;document.getElementById('btn-importar-submit').innerHTML='Importar';if(event.detail.successful){setTimeout(function(){location.reload()},2000);}">
+                  hx-on::after-request="document.getElementById('btn-importar-submit').disabled=false;document.getElementById('btn-importar-submit').innerHTML='Importar';if(event.detail.successful){setTimeout(function(){fecharModal('importar');location.reload()},1000);}">
                 <div class="form-group">
                     <label>Arquivo XLSX</label>
                     <input type="file" name="file" accept=".xlsx" required>
@@ -433,7 +433,7 @@
                 if (data.ja_existem) html += ' | ' + data.ja_existem + ' já existentes';
                 if (data.sem_cnj) html += ' | ' + data.sem_cnj + ' sem CNJ';
                 if (data.erros) html += ' | ❌ ' + data.erros + ' erros';
-                if (data.atualizados_datajud !== undefined) html += '<br>📡 DataJud: ' + data.atualizados_datajud + ' atualizados' + (data.erros_datajud ? ', ' + data.erros_datajud + ' erros' : '');
+                if (data.datajud_agendados) html += '<br>📡 DataJud: ' + data.datajud_agendados + ' processos na fila (consulta em andamento)';
                 html += '</div>';
                 if (data.erros_amostra && data.erros_amostra.length) {
                     html += '<div style="font-size:0.8rem;background:#fff3cd;padding:8px;border-radius:6px;margin-bottom:8px;">';
@@ -514,7 +514,7 @@
                             msg = '✅ Atualizado: ' + data.novas_movimentacoes + ' nova(s) movimentação(ões)';
                         } else {
                             msg = '✅ Importado: ' + (data.importados || 0) + ' processos' + (data.erros ? ', erros: ' + data.erros : '');
-                            if (data.atualizados_datajud !== undefined) msg += ' | 📡 ' + data.atualizados_datajud + ' DataJud' + (data.erros_datajud ? ', ' + data.erros_datajud + ' falhas' : '');
+                            if (data.datajud_agendados) msg += ' | 📡 ' + data.datajud_agendados + ' na fila';
                         }
                         toast.innerHTML = msg;
                     } else {
