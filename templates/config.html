@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configurações - Processos Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f0f2f5; color: #1a1a2e; padding: 20px;
+        }
+        .container { max-width: 700px; margin: 0 auto; }
+        .back { margin-bottom: 16px; }
+        .back a { color: #0f3460; text-decoration: none; font-size: 0.875rem; }
+        .back a:hover { text-decoration: underline; }
+        .card {
+            background: white; border-radius: 10px; padding: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 20px;
+        }
+        .card h2 { font-size: 1.1rem; margin-bottom: 16px; color: #0f3460; }
+        .card p { font-size: 0.875rem; color: #666; margin-bottom: 16px; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; font-size: 0.8rem; color: #666; margin-bottom: 4px; font-weight: 600; }
+        .form-group input {
+            width: 100%; padding: 10px 12px; border: 1px solid #ddd;
+            border-radius: 6px; font-size: 0.875rem;
+        }
+        .form-group .hint { font-size: 0.75rem; color: #999; margin-top: 4px; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .btn {
+            padding: 10px 24px; border: none; border-radius: 6px;
+            cursor: pointer; font-size: 0.875rem; transition: all 0.2s;
+            text-decoration: none; display: inline-flex; align-items: center; gap: 4px;
+        }
+        .btn-primary { background: #1a1a2e; color: white; }
+        .btn-primary:hover { background: #16213e; }
+        .btn-outline { background: transparent; border: 1px solid #ccc; color: #333; }
+        .btn-outline:hover { background: #eee; }
+        .success-msg {
+            background: #e3f0ff; color: #0f3460; padding: 12px 16px;
+            border-radius: 8px; margin-bottom: 16px; font-size: 0.875rem;
+        }
+        hr { border: none; border-top: 1px solid #eee; margin: 24px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="back">
+            <a href="/">← Voltar ao Dashboard</a>
+        </div>
+
+        {% if request.query_params.get('salvo') == 'ok' %}
+        <div class="success-msg">✅ Configurações salvas com sucesso!</div>
+        {% endif %}
+
+        <div class="card">
+            <h2>⚙ Configurações</h2>
+            <p>Configure notificações e o intervalo de consulta ao DataJud.</p>
+
+            <form method="POST" action="/config/salvar">
+                <h3 style="font-size:0.95rem;margin-bottom:12px;color:#1a1a2e;">📧 Email (SMTP)</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Servidor SMTP</label>
+                        <input type="text" name="smtp_host" value="{{ config.get('smtp_host', 'smtp.gmail.com') }}">
+                        <div class="hint">Ex: smtp.gmail.com, smtp.office365.com</div>
+                    </div>
+                    <div class="form-group">
+                        <label>Porta SMTP</label>
+                        <input type="number" name="smtp_port" value="{{ config.get('smtp_port', '587') }}">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Email (usuário SMTP)</label>
+                    <input type="email" name="smtp_user" value="{{ config.get('smtp_user', '') }}">
+                </div>
+                <div class="form-group">
+                    <label>Senha SMTP</label>
+                    <input type="password" name="smtp_pass" value="{{ config.get('smtp_pass', '') }}">
+                    <div class="hint">Para Gmail, use uma senha de app (não a senha normal)</div>
+                </div>
+                <div class="form-group">
+                    <label>Email para notificações</label>
+                    <input type="email" name="notify_email" value="{{ config.get('notify_email', '') }}">
+                </div>
+
+                <hr>
+
+                <h3 style="font-size:0.95rem;margin-bottom:12px;color:#1a1a2e;">✈ Telegram (opcional)</h3>
+                <div class="form-group">
+                    <label>Token do Bot</label>
+                    <input type="text" name="telegram_bot_token" value="{{ config.get('telegram_bot_token', '') }}">
+                    <div class="hint">Crie um bot em @BotFather no Telegram</div>
+                </div>
+                <div class="form-group">
+                    <label>Chat ID</label>
+                    <input type="text" name="telegram_chat_id" value="{{ config.get('telegram_chat_id', '') }}">
+                    <div class="hint">Use @userinfobot para descobrir seu chat_id</div>
+                </div>
+
+                <hr>
+
+                <h3 style="font-size:0.95rem;margin-bottom:12px;color:#1a1a2e;">⏱ Consulta Automática</h3>
+                <div class="form-group">
+                    <label>Intervalo entre consultas (horas)</label>
+                    <input type="number" name="intervalo" value="{{ config.get('datajud_interval_hours', '24') }}" min="1" max="168">
+                    <div class="hint">A cada quantas horas o sistema consulta o DataJud por novos andamentos</div>
+                </div>
+
+                <div style="margin-top:20px;">
+                    <button type="submit" class="btn btn-primary">💾 Salvar Configurações</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>📖 Como usar</h2>
+            <ol style="font-size:0.875rem;color:#333;line-height:1.8;padding-left:20px;">
+                <li><strong>Importe</strong> seus processos: Exporte do Astrea (Administração &gt; Escritório &gt; Manutenção de conta) e faça upload do XLSX no Dashboard</li>
+                <li><strong>Cadastre</strong> manualmente processos que não estão no Astrea usando o botão "Novo Processo"</li>
+                <li><strong>Atualize</strong> manualmente cada processo com o botão 🔄 ou use "Atualizar Todos" para consultar o DataJud</li>
+                <li><strong>Configure</strong> notificações acima para receber alertas de novas movimentações por email ou Telegram</li>
+                <li>O sistema <strong>atualiza automaticamente</strong> no intervalo configurado</li>
+            </ol>
+        </div>
+    </div>
+</body>
+</html>

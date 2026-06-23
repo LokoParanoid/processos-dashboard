@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Processos Dashboard</title>
+    <script src="https://unpkg.com/htmx.org@1.9.4"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f0f2f5; color: #1a1a2e; padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 24px; flex-wrap: wrap; gap: 12px;
+        }
+        header h1 { font-size: 1.5rem; color: #1a1a2e; }
+        header h1 span { color: #e94560; }
+        .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .btn {
+            padding: 8px 16px; border: none; border-radius: 6px;
+            cursor: pointer; font-size: 0.875rem; transition: all 0.2s;
+            text-decoration: none; display: inline-flex; align-items: center; gap: 4px;
+        }
+        .btn-primary { background: #1a1a2e; color: white; }
+        .btn-primary:hover { background: #16213e; }
+        .btn-success { background: #0f3460; color: white; }
+        .btn-success:hover { background: #0c2a4e; }
+        .btn-danger { background: #e94560; color: white; }
+        .btn-danger:hover { background: #d13a52; }
+        .btn-outline { background: transparent; border: 1px solid #ccc; color: #333; }
+        .btn-outline:hover { background: #eee; }
+        .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
+
+        .stats {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px; margin-bottom: 20px;
+        }
+        .stat-card {
+            background: white; border-radius: 10px; padding: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .stat-card .number { font-size: 1.8rem; font-weight: 700; }
+        .stat-card .label { font-size: 0.8rem; color: #666; margin-top: 4px; }
+
+        .filters {
+            background: white; border-radius: 10px; padding: 16px;
+            margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
+        }
+        .filters input, .filters select {
+            padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px;
+            font-size: 0.875rem; min-width: 200px;
+        }
+        .filters select { min-width: 150px; }
+
+        .table-wrapper {
+            background: white; border-radius: 10px; overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            text-align: left; padding: 12px 16px; font-size: 0.75rem;
+            text-transform: uppercase; color: #666; background: #f8f9fa;
+            border-bottom: 2px solid #eee; white-space: nowrap;
+        }
+        td { padding: 10px 16px; border-bottom: 1px solid #f0f0f0; font-size: 0.875rem; }
+        tr:hover { background: #f8f9ff; }
+        .cnj { font-family: monospace; font-size: 0.8rem; color: #0f3460; }
+        .tribunal-badge {
+            display: inline-block; padding: 2px 8px; border-radius: 12px;
+            font-size: 0.75rem; background: #e8ecf1; color: #333;
+        }
+        .status-ativo { color: #0f3460; font-weight: 600; }
+        .status-arquivado { color: #999; }
+        .mov-nova { color: #e94560; font-weight: 600; }
+        .data-cell { white-space: nowrap; font-size: 0.8rem; color: #666; }
+        .modal-overlay {
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+            z-index: 1000; justify-content: center; align-items: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: white; border-radius: 12px; padding: 24px;
+            width: 90%; max-width: 500px; max-height: 80vh; overflow-y: auto;
+        }
+        .modal h2 { margin-bottom: 16px; }
+        .modal .form-group { margin-bottom: 12px; }
+        .modal .form-group label { display: block; font-size: 0.8rem; color: #666; margin-bottom: 4px; }
+        .modal .form-group input, .modal .form-group select {
+            width: 100%; padding: 8px 12px; border: 1px solid #ddd;
+            border-radius: 6px; font-size: 0.875rem;
+        }
+        .modal .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+        .loading { opacity: 0.5; pointer-events: none; }
+        .empty { padding: 40px; text-align: center; color: #999; }
+        .toast {
+            position: fixed; bottom: 20px; right: 20px; padding: 12px 20px;
+            border-radius: 8px; color: white; font-size: 0.875rem;
+            display: none; z-index: 2000;
+        }
+        .toast.success { background: #0f3460; display: block; }
+        .toast.error { background: #e94560; display: block; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⚖ <span>Processos</span>Dashboard</h1>
+            <div class="actions">
+                <button class="btn btn-success" onclick="abrirModal('importar')">📥 Importar XLSX</button>
+                <button class="btn btn-primary" onclick="abrirModal('novo')">➕ Novo Processo</button>
+                <button class="btn btn-outline"
+                    hx-post="/ciclo-atualizacao"
+                    hx-trigger="click"
+                    hx-target="#toast"
+                    hx-swap="innerHTML">
+                    🔄 Atualizar Todos
+                </button>
+                <a href="/config" class="btn btn-outline">⚙ Config</a>
+            </div>
+        </header>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="number">{{ total }}</div>
+                <div class="label">Total de Processos</div>
+            </div>
+            <div class="stat-card">
+                <div class="number" style="color:#0f3460">{{ com_mov_nova }}</div>
+                <div class="label">Com Movimentações</div>
+            </div>
+            <div class="stat-card">
+                <div class="number" style="color:#999">{{ sigilosos }}</div>
+                <div class="label">Sigilosos</div>
+            </div>
+            <div class="stat-card">
+                <div class="number">{{ tribunais|length }}</div>
+                <div class="label">Tribunais</div>
+            </div>
+        </div>
+
+        <form class="filters" method="GET" action="/">
+            <input type="text" name="busca" placeholder="Buscar (CNJ, parte, assunto...)" value="{{ busca }}">
+            <select name="tribunal">
+                <option value="">Todos os tribunais</option>
+                {% for t in tribunais %}
+                <option value="{{ t }}" {% if tribunal_filtro == t %}selected{% endif %}>{{ t }}</option>
+                {% endfor %}
+            </select>
+            <select name="status_filtro">
+                <option value="">Todos os status</option>
+                <option value="ativo" {% if status_filtro == 'ativo' %}selected{% endif %}>Ativo</option>
+                <option value="arquivado" {% if status_filtro == 'arquivado' %}selected{% endif %}>Arquivado</option>
+                <option value="suspenso" {% if status_filtro == 'suspenso' %}selected{% endif %}>Suspenso</option>
+            </select>
+            <button type="submit" class="btn btn-primary">Filtrar</button>
+            <a href="/" class="btn btn-outline">Limpar</a>
+        </form>
+
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Processo</th>
+                        <th>Partes</th>
+                        <th>Tribunal</th>
+                        <th>Últ. Movimentação</th>
+                        <th>Status</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if processos %}
+                    {% for p in processos %}
+                    <tr>
+                        <td>
+                            <div class="cnj">{{ p.numero_cnj }}</div>
+                            <div style="font-size:0.75rem;color:#999">{{ p.classe or '' }}</div>
+                        </td>
+                        <td>
+                            <div><strong>A:</strong> {{ p.parte_autora or '-' }}</div>
+                            <div><strong>R:</strong> {{ p.parte_re or '-' }}</div>
+                        </td>
+                        <td>
+                            <span class="tribunal-badge">{{ p.tribunal or 'N/I' }}</span>
+                            {% if p.sigiloso %}
+                            <span style="color:#e94560;font-size:0.75rem;">🔒</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if p.ultima_movimentacao_data %}
+                            <div class="data-cell">{{ p.ultima_movimentacao_data.strftime('%d/%m/%Y %H:%M') }}</div>
+                            <div style="font-size:0.75rem;color:#666;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                {{ p.ultima_movimentacao_descricao or '' }}
+                            </div>
+                            {% else %}
+                            <span style="color:#999">Nenhuma</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="status-{{ p.status }}">{{ p.status or 'ativo' }}</span>
+                        </td>
+                        <td>
+                            <a href="/processo/{{ p.id }}" class="btn btn-sm btn-outline">Ver</a>
+                            <button class="btn btn-sm btn-outline"
+                                hx-post="/processo/{{ p.id }}/atualizar"
+                                hx-trigger="click"
+                                hx-swap="innerHTML"
+                                hx-target="#toast">
+                                🔄
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% else %}
+                    <tr><td colspan="6" class="empty">Nenhum processo encontrado. Importe uma planilha do Astrea ou cadastre manualmente.</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-novo">
+        <div class="modal">
+            <h2>Novo Processo</h2>
+            <form hx-post="/processo/novo" hx-target="#toast" hx-swap="innerHTML"
+                  hx-on::after-request="if(event.detail.successful) { fecharModal('novo'); this.reset(); }">
+                <div class="form-group">
+                    <label>Número CNJ *</label>
+                    <input type="text" name="numero_cnj" required placeholder="Ex: 0000000-00.0000.0.00.0000">
+                </div>
+                <div class="form-group">
+                    <label>Tribunal</label>
+                    <input type="text" name="tribunal" placeholder="Ex: TJSP, TRF1">
+                </div>
+                <div class="form-group">
+                    <label>Parte Autora</label>
+                    <input type="text" name="parte_autora">
+                </div>
+                <div class="form-group">
+                    <label>Parte Ré</label>
+                    <input type="text" name="parte_re">
+                </div>
+                <div class="form-group">
+                    <label>Classe</label>
+                    <input type="text" name="classe">
+                </div>
+                <div class="form-group">
+                    <label>Assunto</label>
+                    <input type="text" name="assunto">
+                </div>
+                <div class="form-group">
+                    <label>OAB do Advogado</label>
+                    <input type="text" name="advogado_oab">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-outline" onclick="fecharModal('novo')">Cancelar</button>
+                    <button type="submit" class="btn btn-success">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-importar">
+        <div class="modal">
+            <h2>Importar Planilha do Astrea</h2>
+            <p style="font-size:0.875rem;color:#666;margin-bottom:16px;">
+                Exporte seus processos no Astrea (Administração &gt; Escritório &gt; Manutenção de conta &gt; "clique aqui").
+                Você receberá um XLSX por email. Faça upload aqui.
+            </p>
+            <form hx-post="/importar/xlsx" hx-target="#toast" hx-swap="innerHTML"
+                  hx-encoding="multipart/form-data"
+                  hx-on::after-request="if(event.detail.successful) { fecharModal('importar'); setTimeout(() => location.reload(), 1000); }">
+                <div class="form-group">
+                    <label>Arquivo XLSX</label>
+                    <input type="file" name="file" accept=".xlsx" required>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-outline" onclick="fecharModal('importar')">Cancelar</button>
+                    <button type="submit" class="btn btn-success">Importar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+        function abrirModal(id) {
+            document.getElementById('modal-' + id).classList.add('active');
+        }
+        function fecharModal(id) {
+            document.getElementById('modal-' + id).classList.remove('active');
+        }
+        document.querySelectorAll('.modal-overlay').forEach(el => {
+            el.addEventListener('click', function(e) {
+                if (e.target === this) this.classList.remove('active');
+            });
+        });
+        document.body.addEventListener('htmx:afterRequest', function(evt) {
+            const toast = document.getElementById('toast');
+            if (toast.innerHTML) {
+                const data = JSON.parse(evt.detail.xhr.responseText);
+                if (data.status === 'ok' || data.importados > 0) {
+                    toast.className = 'toast success';
+                    toast.innerHTML = data.novas_movimentacoes !== undefined
+                        ? '✅ Atualizado: ' + data.novas_movimentacoes + ' nova(s) movimentação(ões)'
+                        : '✅ Importado: ' + (data.importados || 0) + ' processos' + (data.erros ? ', erros: ' + data.erros : '');
+                } else {
+                    toast.className = 'toast error';
+                    toast.innerHTML = '❌ ' + (data.mensagem || 'Erro ao processar');
+                }
+                setTimeout(() => { toast.className = 'toast'; toast.innerHTML = ''; }, 4000);
+            }
+        });
+    </script>
+</body>
+</html>
