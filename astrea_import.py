@@ -198,7 +198,18 @@ def _importar_xlsx_astrea(ws, session) -> dict:
         "colunas_planilha": colunas_planilha,
         "amostra_linha": amostra_linha,
         "formato": "astrea",
+        "mensagem": _mensagem_resultado(importados, erros, ja_existem, sem_cnj, "astrea"),
     }
+
+
+def _mensagem_resultado(importados: int, erros: int, ja_existem: int, sem_cnj: int, formato: str) -> str:
+    if importados > 0:
+        return ""
+    if ja_existem > 0 and erros == 0 and sem_cnj == 0:
+        return f"Todos os {ja_existem} processos já estavam cadastrados"
+    if ja_existem == 0 and erros == 0 and sem_cnj == 0:
+        return "Nenhum processo encontrado nas linhas da planilha"
+    return ""
 
 
 def _importar_xlsx_normal(ws, session) -> dict:
@@ -303,8 +314,9 @@ def _importar_xlsx_normal(ws, session) -> dict:
     }
     if erros_amostra:
         resultado["erros_amostra"] = erros_amostra
-    if importados == 0 and erros == 0 and ja_existem == 0 and sem_cnj == 0:
-        resultado["mensagem"] = "Nenhum processo encontrado nas linhas da planilha"
+    msg = _mensagem_resultado(importados, erros, ja_existem, sem_cnj, "tabular")
+    if msg:
+        resultado["mensagem"] = msg
     return resultado
 
 

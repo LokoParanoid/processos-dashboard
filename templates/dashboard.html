@@ -352,7 +352,7 @@
             <form hx-post="/importar/xlsx" hx-target="#resultado-importacao"
                   hx-encoding="multipart/form-data"
                   hx-on::before-request="document.getElementById('btn-importar-submit').disabled=true;document.getElementById('btn-importar-submit').innerHTML='⏳ Importando...'"
-                  hx-on::after-request="document.getElementById('btn-importar-submit').disabled=false;document.getElementById('btn-importar-submit').innerHTML='Importar';if(event.detail.successful){setTimeout(function(){fecharModal('importar');location.reload()},1000);}">
+                  hx-on::after-request="var btn=document.getElementById('btn-importar-submit');btn.disabled=false;btn.innerHTML='Importar';try{var d=JSON.parse(event.detail.xhr.responseText);if(event.detail.successful&&d.importados>0){setTimeout(function(){fecharModal('importar');location.reload()},1000);}}catch(e){}">
                 <div class="form-group">
                     <label>Arquivo XLSX</label>
                     <input type="file" name="file" accept=".xlsx" required>
@@ -424,6 +424,12 @@
                 if (data.dica) {
                     html += '<p style="font-size:0.8rem;color:#666;margin-top:8px;">💡 ' + data.dica + '</p>';
                 }
+                document.getElementById('resultado-importacao').innerHTML = html;
+                return;
+            }
+            if (data.mensagem && data.importados === 0) {
+                html = '<div class="toast" style="display:block;background:#f0ad4e;margin-bottom:12px;">⚠️ ' + data.mensagem + '</div>';
+                html += '<div style="margin-top:8px;text-align:right;"><button class="btn btn-outline" onclick="fecharModal(\'importar\');location.reload()">Fechar</button></div>';
                 document.getElementById('resultado-importacao').innerHTML = html;
                 return;
             }
@@ -517,6 +523,12 @@
                             if (data.datajud_agendados) msg += ' | 📡 ' + data.datajud_agendados + ' na fila';
                         }
                         toast.innerHTML = msg;
+                    } else if (data.mensagem) {
+                        toast.className = 'toast error';
+                        toast.innerHTML = '⚠️ ' + data.mensagem;
+                    } else if (evt.detail.xhr && evt.detail.xhr.status === 422) {
+                        toast.className = 'toast error';
+                        toast.innerHTML = '❌ ' + (data.mensagem || 'Erro de validação');
                     } else {
                         toast.className = 'toast error';
                         toast.innerHTML = '❌ ' + (data.mensagem || 'Erro ao processar');
