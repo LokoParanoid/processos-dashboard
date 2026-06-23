@@ -116,6 +116,15 @@
         }
         @keyframes spin { to { transform: rotate(360deg); } }
         .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .checkbox-col { width: 40px; text-align: center; }
+        .checkbox-col input { cursor: pointer; width: 16px; height: 16px; }
+        .batch-bar {
+            background: #e8ecf1; border-radius: 8px; padding: 8px 16px;
+            margin-bottom: 12px; display: none; align-items: center; gap: 12px;
+            font-size: 0.875rem;
+        }
+        .batch-bar.active { display: flex; }
+        .batch-bar .count { font-weight: 600; color: #0f3460; }
     </style>
 </head>
 <body>
@@ -180,10 +189,24 @@
             <a href="/" class="btn btn-outline" onclick="window.scrollTo({top:0,behavior:'smooth'})">Limpar</a>
         </form>
 
+        <div class="batch-bar" id="batch-bar">
+            <span><strong class="count" id="batch-count">0</strong> processos selecionados</span>
+            <button class="btn btn-danger btn-sm" id="btn-deletar-lote"
+                hx-post="/processo/deletar-lote"
+                hx-include=".processo-checkbox:checked"
+                hx-target="#toast"
+                hx-confirm="Excluir os processos selecionados? Esta ação não pode ser desfeita."
+                hx-on::before-request="document.getElementById('btn-deletar-lote').disabled=true;document.getElementById('btn-deletar-lote').innerHTML='⏳ Excluindo...'"
+                hx-on::after-request="document.getElementById('btn-deletar-lote').disabled=false;document.getElementById('btn-deletar-lote').innerHTML='🗑 Excluir Selecionados';if(event.detail.successful){setTimeout(function(){location.reload()},500);}">
+                🗑 Excluir Selecionados
+            </button>
+        </div>
+
         <div class="table-wrapper">
             <table>
                 <thead>
                     <tr>
+                        <th class="checkbox-col"><input type="checkbox" id="select-all" title="Selecionar todos"></th>
                         <th>Processo</th>
                         <th>Partes</th>
                         <th>Tribunal</th>
@@ -196,6 +219,9 @@
                     {% if processos %}
                     {% for p in processos %}
                     <tr>
+                        <td class="checkbox-col">
+                            <input type="checkbox" class="processo-checkbox" name="ids" value="{{ p.id }}" onchange="atualizarBatchBar()">
+                        </td>
                         <td>
                             <div class="cnj">{{ p.numero_cnj }}</div>
                             <div style="font-size:0.75rem;color:#999">{{ p.classe or '' }}</div>
@@ -237,11 +263,21 @@
                                 hx-on::after-request="this.disabled=false;this.innerHTML='🔄'">
                                 🔄
                             </button>
+                            <button class="btn btn-sm btn-danger"
+                                hx-post="/processo/{{ p.id }}/deletar"
+                                hx-trigger="click"
+                                hx-swap="innerHTML"
+                                hx-target="#toast"
+                                hx-confirm="Excluir processo {{ p.numero_cnj }}? Esta ação não pode ser desfeita."
+                                hx-on::before-request="this.disabled=true;this.innerHTML='⏳'"
+                                hx-on::after-request="this.disabled=false;this.innerHTML='🗑';if(event.detail.successful){try{var r=JSON.parse(event.detail.xhr.responseText);if(r.status==='ok')setTimeout(function(){location.reload()},500);}catch(e){}}">
+                                🗑
+                            </button>
                         </td>
                     </tr>
                     {% endfor %}
                     {% else %}
-                    <tr><td colspan="6" class="empty">Nenhum processo encontrado. Importe uma planilha do Astrea ou cadastre manualmente.</td></tr>
+                    <tr><td colspan="7" class="empty">Nenhum processo encontrado. Importe uma planilha do Astrea ou cadastre manualmente.</td></tr>
                     {% endif %}
                 </tbody>
             </table>
@@ -436,6 +472,27 @@
         document.querySelectorAll('.pagination a').forEach(function(a) {
             a.addEventListener('click', function() { window.scrollTo({ top: 0, behavior: 'smooth' }); });
         });
+
+        function atualizarBatchBar() {
+            var checked = document.querySelectorAll('.processo-checkbox:checked').length;
+            var bar = document.getElementById('batch-bar');
+            var count = document.getElementById('batch-count');
+            if (checked > 0) {
+                bar.classList.add('active');
+                count.textContent = checked;
+            } else {
+                bar.classList.remove('active');
+            }
+        }
+        var selectAll = document.getElementById('select-all');
+        if (selectAll) {
+            selectAll.addEventListener('change', function() {
+                document.querySelectorAll('.processo-checkbox').forEach(function(cb) {
+                    cb.checked = selectAll.checked;
+                });
+                atualizarBatchBar();
+            });
+        }
 
         document.body.addEventListener('htmx:afterRequest', function(evt) {
             var target = evt.detail.target;

@@ -179,6 +179,34 @@ async def atualizar_processo_view(processo_id: int):
         session.close()
 
 
+@app.post("/processo/{processo_id}/deletar")
+async def deletar_processo(processo_id: int):
+    session = get_session()
+    try:
+        processo = session.query(Processo).filter_by(id=processo_id).first()
+        if not processo:
+            return JSONResponse({"status": "erro", "mensagem": "Processo não encontrado"})
+        cnj = processo.numero_cnj
+        session.delete(processo)
+        session.commit()
+        return JSONResponse({"status": "ok", "mensagem": f"Processo {cnj} excluído"})
+    finally:
+        session.close()
+
+
+@app.post("/processo/deletar-lote")
+async def deletar_lote(ids: list[int] = Form(default=[])):
+    if not ids:
+        return JSONResponse({"status": "erro", "mensagem": "Nenhum processo selecionado"})
+    session = get_session()
+    try:
+        count = session.query(Processo).filter(Processo.id.in_(ids)).delete(synchronize_session=False)
+        session.commit()
+        return JSONResponse({"status": "ok", "deletados": count})
+    finally:
+        session.close()
+
+
 @app.post("/importar/xlsx")
 async def importar_xlsx_view(file: UploadFile = File(...)):
     import tempfile
