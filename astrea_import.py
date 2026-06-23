@@ -183,6 +183,7 @@ def _importar_xlsx_astrea(ws, session) -> dict:
             if len(erros_amostra) < 3:
                 erros_amostra.append(str(e))
 
+    session.commit()
     return {
         "importados": importados,
         "erros": erros,
@@ -281,6 +282,7 @@ def _importar_xlsx_normal(ws, session) -> dict:
             if len(erros_amostra) < 3:
                 erros_amostra.append(str(e))
 
+    session.commit()
     resultado: dict[str, object] = {
         "status": "ok",
         "importados": importados,
