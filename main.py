@@ -4,7 +4,7 @@ import os
 import sys
 import threading
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI, UploadFile, File, Form, Request, Query, HTTPException
@@ -140,7 +140,12 @@ async def dashboard(request: Request, busca: str = Query(""), tribunal: str = Qu
         if tribunal:
             query = query.filter(Processo.tribunal.like(f"%{tribunal}%"))
 
-        if status_filtro:
+        if status_filtro == "desatualizado":
+            limite = datetime.utcnow() - timedelta(days=7)
+            query = query.filter(Processo.ultima_consulta_datajud < limite)
+        elif status_filtro == "nao_consultado":
+            query = query.filter(Processo.ultima_consulta_datajud.is_(None))
+        elif status_filtro:
             query = query.filter(Processo.status == status_filtro)
 
         query = query.order_by(Processo.ultima_movimentacao_data.desc().nullslast())
@@ -149,10 +154,35 @@ async def dashboard(request: Request, busca: str = Query(""), tribunal: str = Qu
         ofs = (pagina - 1) * ITENS_POR_PAGINA
         processos = query.offset(ofs).limit(ITENS_POR_PAGINA).all()
 
+        agora = datetime.utcnow()
+        for p in processos:
+            if p.ultima_consulta_datajud:
+                delta = agora - p.ultima_consulta_datajud
+                p._dias_sem_consulta = delta.days
+                if delta.days > 0:
+                    p._ultima_consulta_str = f"há {delta.days} dia(s)"
+                elif delta.seconds >= 3600:
+                    p._ultima_consulta_str = f"há {delta.seconds // 3600} hora(s)"
+                elif delta.seconds >= 60:
+                    p._ultima_consulta_str = f"há {delta.seconds // 60} min"
+                else:
+                    p._ultima_consulta_str = "Agora"
+            else:
+                p._dias_sem_consulta = None
+                p._ultima_consulta_str = "Nunca"
+
         tribunais_lista = session.query(Processo.tribunal).distinct().order_by(Processo.tribunal).all()
         tribunais = [t[0] for t in tribunais_lista if t[0]]
 
-        filtro_base = query
+        filtro_base = session.query(Processo)
+        if busca:
+            t = f"%{busca}%"
+            filtro_base = filtro_base.filter(
+                Processo.numero_cnj.like(t) | Processo.parte_autora.like(t) |
+                Processo.parte_re.like(t) | Processo.assunto.like(t) | Processo.classe.like(t)
+            )
+        if tribunal:
+            filtro_base = filtro_base.filter(Processo.tribunal.like(f"%{tribunal}%"))
         sigilosos_total = filtro_base.filter(Processo.sigiloso == True).count()
         com_mov_count = filtro_base.filter(
             Processo.ultima_movimentacao_data.isnot(None)

@@ -77,6 +77,8 @@
         .status-arquivado { color: #999; }
         .mov-nova { color: #e94560; font-weight: 600; }
         .data-cell { white-space: nowrap; font-size: 0.8rem; color: #666; }
+        .row-warning { background: #fff3cd !important; }
+        .row-danger { background: #f8d7da !important; }
         .modal-overlay {
             display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5);
             z-index: 1000; justify-content: center; align-items: center;
@@ -178,6 +180,8 @@
                 <option value="ativo" {% if status_filtro == 'ativo' %}selected{% endif %}>Ativo</option>
                 <option value="arquivado" {% if status_filtro == 'arquivado' %}selected{% endif %}>Arquivado</option>
                 <option value="suspenso" {% if status_filtro == 'suspenso' %}selected{% endif %}>Suspenso</option>
+                <option value="desatualizado" {% if status_filtro == 'desatualizado' %}selected{% endif %}>Desatualizado (+7 dias)</option>
+                <option value="nao_consultado" {% if status_filtro == 'nao_consultado' %}selected{% endif %}>Nunca consultado</option>
             </select>
             <button type="submit" class="btn btn-primary" onclick="window.scrollTo({top:0,behavior:'smooth'})">Filtrar</button>
             <a href="/" class="btn btn-outline" onclick="window.scrollTo({top:0,behavior:'smooth'})">Limpar</a>
@@ -215,6 +219,7 @@
                         <th>Partes</th>
                         <th>Tribunal</th>
                         <th>Últ. Movimentação</th>
+                        <th>Últ. Consulta</th>
                         <th>Status</th>
                         <th>Ações</th>
                     </tr>
@@ -222,7 +227,15 @@
                 <tbody>
                     {% if processos %}
                     {% for p in processos %}
-                    <tr>
+                    {% set row_class = '' %}
+                    {% if not p.ultimo_erro_datajud %}
+                        {% if p._dias_sem_consulta is not none and p._dias_sem_consulta > 7 %}
+                            {% set row_class = 'row-danger' %}
+                        {% elif p._dias_sem_consulta is not none and p._dias_sem_consulta > 2 %}
+                            {% set row_class = 'row-warning' %}
+                        {% endif %}
+                    {% endif %}
+                    <tr class="{{ row_class }}">
                         <td class="checkbox-col">
                             <input type="checkbox" class="processo-checkbox" name="ids" value="{{ p.id }}" onchange="atualizarBatchBar()">
                         </td>
@@ -253,6 +266,7 @@
                             <span style="color:#999">Nenhuma</span>
                             {% endif %}
                         </td>
+                        <td class="data-cell">{{ p._ultima_consulta_str or 'Nunca' }}</td>
                         <td>
                             <span class="status-{{ p.status }}">{{ p.status or 'ativo' }}</span>
                         </td>
@@ -281,7 +295,7 @@
                     </tr>
                     {% endfor %}
                     {% else %}
-                    <tr><td colspan="7" class="empty">Nenhum processo encontrado. Importe uma planilha do Astrea ou cadastre manualmente.</td></tr>
+                    <tr><td colspan="8" class="empty">Nenhum processo encontrado. Importe uma planilha do Astrea ou cadastre manualmente.</td></tr>
                     {% endif %}
                 </tbody>
             </table>

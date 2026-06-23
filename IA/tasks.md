@@ -127,30 +127,30 @@
 
 ### 3.1 Indicadores visuais
 
-- [ ] **3.1.1** Adicionar classe CSS `warning` para processos com >2 dias sem consulta
+- [x] **3.1.1** Adicionar classe CSS `warning` para processos com >2 dias sem consulta
   - Calcular diferença em `main.py` e passar como flag no template
   - Fundo amarelo claro na linha da tabela (`#fff3cd`)
-- [ ] **3.1.2** Adicionar classe CSS `danger` para processos com >7 dias sem consulta
+- [x] **3.1.2** Adicionar classe CSS `danger` para processos com >7 dias sem consulta
   - Fundo vermelho claro (`#f8d7da`)
-- [ ] **3.1.3** Prioridade: warning < danger < erro (não sobrescrever ⚠)
+- [x] **3.1.3** Prioridade: warning < danger < erro (não sobrescrever ⚠)
 - [x] **3.1.4** Tooltip do ⚠ com data e mensagem de erro (já implementado)
-- [ ] **3.1.5** Adicionar coluna "Última Consulta" na tabela
+- [x] **3.1.5** Adicionar coluna "Última Consulta" na tabela
   - Mostrar data relativa ("há 2 dias", "há 1 hora")
 
 ### 3.2 Filtro por "obsoleto"
 
-- [ ] **3.2.1** Adicionar option "Desatualizado (+7 dias)" no `<select name="status_filtro">`
+- [x] **3.2.1** Adicionar option "Desatualizado (+7 dias)" no `<select name="status_filtro">`
   - Value: `desatualizado`
-- [ ] **3.2.2** Adicionar condição em `dashboard()` no `main.py`
+- [x] **3.2.2** Adicionar condição em `dashboard()` no `main.py`
   - Se `status_filtro == "desatualizado"`: filtrar `ultima_consulta_datajud < 7 dias atrás`
-- [ ] **3.2.3** Adicionar option "Nunca consultado" no select
+- [x] **3.2.3** Adicionar option "Nunca consultado" no select
   - Value: `nao_consultado` — filtrar `ultima_consulta_datajud == NULL`
 
 ### 3.3 Testes
 
-- [ ] **3.3.1** Testar destaque visual com processos de diferentes idades
-- [ ] **3.3.2** Testar filtro "desatualizado" e "nunca consultado"
-- [ ] **3.3.3** Commit + push
+- [x] **3.3.1** Testar destaque visual com processos de diferentes idades
+- [x] **3.3.2** Testar filtro "desatualizado" e "nunca consultado"
+- [x] **3.3.3** Commit + push
 
 ---
 
