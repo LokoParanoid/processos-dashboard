@@ -10,7 +10,7 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: #f0f2f5; color: #1a1a2e; padding: 20px;
         }
-        .container { max-width: 900px; margin: 0 auto; }
+        .container { max-width: 960px; margin: 0 auto; }
         .back { margin-bottom: 16px; }
         .back a { color: #0f3460; text-decoration: none; font-size: 0.875rem; }
         .back a:hover { text-decoration: underline; }
@@ -26,19 +26,34 @@
         }
         .btn-primary { background: #1a1a2e; color: white; }
         .btn-primary:hover { background: #16213e; }
+        .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
+        .btn-success { background: #1b8a3d; color: white; }
+        .btn:disabled { opacity: 0.5; cursor: default; }
         .form-group { margin-bottom: 12px; }
         .form-group label { display: block; font-size: 0.8rem; color: #666; margin-bottom: 4px; }
         .form-group input { width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.875rem; }
         .result-item {
-            padding: 12px; border-bottom: 1px solid #f0f0f0;
-            display: flex; gap: 12px; align-items: flex-start;
+            padding: 14px; border-bottom: 1px solid #f0f0f0;
+            display: flex; gap: 14px; align-items: flex-start;
         }
         .result-item:last-child { border-bottom: none; }
-        .result-cnj { font-family: monospace; font-size: 0.85rem; color: #0f3460; }
-        .result-info { font-size: 0.8rem; color: #666; }
+        .result-content { flex: 1; min-width: 0; }
+        .result-cnj { font-family: monospace; font-size: 0.85rem; color: #0f3460; font-weight: 600; }
+        .result-info { font-size: 0.8rem; color: #555; margin-top: 4px; }
+        .result-tag {
+            display: inline-block; font-size: 0.7rem; padding: 2px 8px;
+            border-radius: 10px; background: #e8eaf6; color: #0f3460;
+        }
         .empty { padding: 40px; text-align: center; color: #999; }
         .row { display: flex; gap: 12px; }
         .row .form-group { flex: 1; }
+        .flash { margin-top: 8px; padding: 6px 10px; border-radius: 6px; font-size: 0.8rem; }
+        .flash-success { background: #d4edda; color: #155724; }
+        .flash-error { background: #f8d7da; color: #721c24; }
+        .stats { font-size: 0.8rem; color: #666; margin-top: 8px; }
+        .progress { display: none; text-align: center; padding: 20px; color: #666; }
+        .progress.visible { display: block; }
+        .search-again { margin-top: 20px; text-align: center; }
     </style>
 </head>
 <body>
@@ -50,13 +65,13 @@
         <div class="card">
             <h2>Buscar Processos por OAB</h2>
             <p style="font-size:0.875rem;color:#666;margin-bottom:16px;">
-                Consulta a API DataJud do CNJ por número de OAB em todos os tribunais.
+                Consulta a API DataJud do CNJ por número da OAB em todos os tribunais.
             </p>
             <form method="GET" action="/busca-oab">
                 <div class="row">
                     <div class="form-group">
-                        <label>Número da OAB (com ou sem dígito)</label>
-                        <input type="text" name="oab" value="{{ oab }}" placeholder="Ex: 123456" required>
+                        <label>Número da OAB (com ou sem UF/dígito)</label>
+                        <input type="text" name="oab" value="{{ oab }}" placeholder="Ex: GO 50.117 ou 50117" required>
                     </div>
                     <div class="form-group">
                         <label>Tribunal (opcional)</label>
@@ -71,15 +86,40 @@
         <div class="card">
             <h2>Resultados para OAB {{ oab }}</h2>
             {% if resultados %}
-            <p style="font-size:0.8rem;color:#666;margin-bottom:12px;">{{ resultados|length }} processo(s) encontrado(s)</p>
+            <p class="stats">{{ total }} processo(s) encontrado(s)</p>
             {% for r in resultados %}
-            <div class="result-item">
-                <div>
+            {% set tribunal_nome = r.get('orgaoJulgador', {}).get('tribunal') or r.get('tribunal') or '' %}
+            {% set classe_nome = r.get('classe', {}).get('nome') or '' %}
+            {% set advs = r.get('advogados', []) %}
+            {% set movs = r.get('movimentos', []) or r.get('movimentacoes', []) %}
+            {% set ult_mov = movs[-1] if movs else None %}
+            <div class="result-item" id="result-{{ loop.index }}">
+                <div class="result-content">
                     <div class="result-cnj">{{ r.get('numeroProcesso', 'N/I') }}</div>
                     <div class="result-info">
-                        {{ r.get('classe', {}).get('nome', '') }}
-                        {% if r.get('orgaoJulgador') %} - {{ r.get('orgaoJulgador', {}).get('nome', '') }}{% endif %}
+                        <span class="result-tag">{{ tribunal_nome or '—' }}</span>
+                        {% if classe_nome %}<span>{{ classe_nome }}</span>{% endif %}
                     </div>
+                    {% if r.get('assunto') %}
+                    <div class="result-info"><strong>Assunto:</strong> {{ r.get('assunto') }}</div>
+                    {% endif %}
+                    {% if advs %}
+                    <div class="result-info"><strong>Advogados:</strong>
+                        {% for a in advs %}{{ a.get('nome', '') }}{% if not loop.last %}; {% endif %}{% endfor %}
+                    </div>
+                    {% endif %}
+                    {% if ult_mov %}
+                    <div class="result-info" style="color:#888;font-size:0.75rem;margin-top:4px;">
+                        Última mov: {{ ult_mov.get('dataHora') or ult_mov.get('data') or '' }}
+                        — {{ ult_mov.get('descricao') or ult_mov.get('nome') or '' }}
+                    </div>
+                    {% endif %}
+                </div>
+                <div style="flex-shrink:0;">
+                    <button class="btn btn-primary btn-sm"
+                            onclick="importar(this, {{ loop.index }})"
+                            data-index="{{ loop.index }}">Importar</button>
+                    <div class="import-flash" data-index="{{ loop.index }}"></div>
                 </div>
             </div>
             {% endfor %}
@@ -89,5 +129,41 @@
         </div>
         {% endif %}
     </div>
+
+    <script>
+    window._resultados = {{ resultados | tojson }};
+
+    function importar(btn, idx) {
+        const source = window._resultados[idx - 1];
+        if (!source) return;
+
+        btn.disabled = true;
+        btn.textContent = 'Importando...';
+        const flash = document.querySelector('.import-flash[data-index="' + idx + '"]');
+
+        fetch('/busca-oab/importar', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(source)
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'ok') {
+                btn.className = 'btn btn-success btn-sm';
+                btn.textContent = 'Importado';
+                flash.innerHTML = '<div class="flash flash-success">Importado</div>';
+            } else {
+                btn.disabled = false;
+                btn.textContent = 'Importar';
+                flash.innerHTML = '<div class="flash flash-error">' + (data.mensagem || 'Erro') + '</div>';
+            }
+        })
+        .catch(() => {
+            btn.disabled = false;
+            btn.textContent = 'Importar';
+            flash.innerHTML = '<div class="flash flash-error">Erro de conexão</div>';
+        });
+    }
+    </script>
 </body>
 </html>
