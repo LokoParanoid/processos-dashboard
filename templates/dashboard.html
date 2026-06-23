@@ -324,6 +324,16 @@
         });
         function montarResultadoImportacao(data) {
             var html = '';
+            function montarAmostra(amostra) {
+                if (!amostra) return '';
+                var h = '<div style="font-size:0.75rem;background:#f5f5f5;padding:6px;border-radius:4px;margin-top:6px;overflow-x:auto;">';
+                h += '<strong style="color:#666;">Primeira linha de dados:</strong><br>';
+                for (var c in amostra) {
+                    h += '<span style="display:inline-block;margin:1px 3px;padding:1px 4px;background:#eee;border-radius:3px;white-space:nowrap;">' + amostra[c] + '</span>';
+                }
+                h += '</div>';
+                return h;
+            }
             if (data.status === 'erro') {
                 html = '<div class="toast" style="display:block;background:#e94560;margin-bottom:12px;">❌ ' + data.mensagem + '</div>';
                 if (data.colunas_planilha && data.colunas_planilha.length) {
@@ -335,6 +345,7 @@
                     }
                     html += '</div>';
                 }
+                html += montarAmostra(data.amostra_linha);
                 if (data.dica) {
                     html += '<p style="font-size:0.8rem;color:#666;margin-top:8px;">💡 ' + data.dica + '</p>';
                 }
@@ -366,10 +377,15 @@
                     }
                     html += '</div>';
                 }
+                html += montarAmostra(data.amostra_linha);
                 html += '<div style="margin-top:8px;text-align:right;"><button class="btn btn-outline" onclick="fecharModal(\'importar\');setTimeout(function(){location.reload()},300);">Fechar</button></div>';
                 document.getElementById('resultado-importacao').innerHTML = html;
             } else if (data.mensagem) {
                 html = '<div class="toast" style="display:block;background:#e94560;margin-bottom:12px;">❌ ' + data.mensagem + '</div>';
+                if (data.amostra_linha) {
+                    html += montarAmostra(data.amostra_linha);
+                }
+                html += '<div style="margin-top:8px;text-align:right;"><button class="btn btn-outline" onclick="fecharModal(\'importar\')">Fechar</button></div>';
                 document.getElementById('resultado-importacao').innerHTML = html;
             }
         }

@@ -25,14 +25,14 @@ def _extrair_cnj(texto: str) -> str:
 
 
 MAPEAMENTO = {
-    "processo": ["processo", "número", "numero", "nº", "cnj", "num_cnj"],
-    "tribunal": ["tribunal", "orgao", "órgão", "vara", "comarca"],
-    "classe": ["classe", "classe_principal", "natureza"],
-    "assunto": ["assunto", "assunto_principal"],
-    "autora": ["autora", "autor", "requerente", "parte_ativa", "parte_autora"],
-    "re": ["reu", "ré", "requerido", "parte_passiva", "parte_re"],
-    "oab": ["oab", "advogado", "adv", "oab_advogado"],
-    "data_ajuizamento": ["data_ajuizamento", "data_distribuicao", "data_autuacao", "data"],
+    "processo": ["processo", "número", "numero", "nº", "n°", "n.º", "cnj", "num_cnj", "num_proc", "númeroprocesso", "numeroprocesso", "protocolo"],
+    "tribunal": ["tribunal", "orgao", "órgão", "vara", "comarca", "tribunalorigem"],
+    "classe": ["classe", "classe_principal", "natureza", "classejudicial"],
+    "assunto": ["assunto", "assunto_principal", "assuntos"],
+    "autora": ["autora", "autor", "requerente", "parte_ativa", "parte_autora", "requerentes"],
+    "re": ["reu", "ré", "requerido", "parte_passiva", "parte_re", "requeridos"],
+    "oab": ["oab", "advogado", "adv", "oab_advogado", "advogados"],
+    "data_ajuizamento": ["data_ajuizamento", "data_distribuicao", "data_autuacao", "data", "dataajuizamento"],
 }
 
 
@@ -71,6 +71,12 @@ def importar_xlsx(caminho: str) -> dict[str, object]:
     for campo in MAPEAMENTO:
         colunas_mapeadas[campo] = colunas_idx.get(campo) is not None
 
+    amostra_linha = {}
+    for row_sample in ws.iter_rows(min_row=2, max_row=2, values_only=True):
+        for i, val in enumerate(row_sample):
+            amostra_linha[f"col_{i+1}"] = str(val)[:80] if val is not None else "(vazio)"
+        break
+
     if col_processo is None:
         wb.close()
         return {
@@ -78,6 +84,7 @@ def importar_xlsx(caminho: str) -> dict[str, object]:
             "mensagem": "Coluna 'Processo' (CNJ) não encontrada na planilha",
             "colunas_planilha": colunas_planilha,
             "colunas_mapeadas": colunas_mapeadas,
+            "amostra_linha": amostra_linha,
             "dica": "Verifique se a planilha tem uma coluna com nome: processo, número, CNJ, num_cnj ou nº",
         }
 
@@ -156,9 +163,11 @@ def importar_xlsx(caminho: str) -> dict[str, object]:
         "sem_cnj": sem_cnj,
         "colunas_planilha": colunas_planilha,
         "colunas_mapeadas": colunas_mapeadas,
+        "amostra_linha": amostra_linha,
     }
     if erros_amostra:
         resultado["erros_amostra"] = erros_amostra
     if importados == 0 and erros == 0 and ja_existem == 0 and sem_cnj == 0:
-        resultado["mensagem"] = "Planilha vazia (nenhuma linha com dados encontrada)"
+        resultado["mensagem"] = "Nenhum processo encontrado nas linhas da planilha"
+        resultado["amostra_linha"] = amostra_linha
     return resultado
