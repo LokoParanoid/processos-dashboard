@@ -17,6 +17,10 @@ def _extrair_cnj(texto: str) -> str:
     match = re.search(padrao, texto)
     if match:
         return match.group(0)
+    padrao_flex = r"\d{7}-\d{2}\.\d{4}\.\d{1}\.\d{2}\.\d{3,6}"
+    match = re.search(padrao_flex, texto)
+    if match:
+        return match.group(0)
     numbers = re.findall(r"\d+", texto)
     cnj = "".join(numbers)
     if len(cnj) >= 20:
@@ -56,14 +60,142 @@ def _mapear_colunas(ws) -> dict:
     return resultado, list(colunas.keys())
 
 
-def importar_xlsx(caminho: str) -> dict[str, object]:
-    path = Path(caminho)
-    if not path.exists():
-        return {"status": "erro", "mensagem": f"Arquivo não encontrado: {caminho}"}
+def _extrair_cnj_da_linha(valores: list) -> str:
+    texto = " ".join(str(v) for v in valores if v)
+    return _extrair_cnj(texto)
 
-    wb = load_workbook(path, read_only=True, data_only=True)
-    ws = wb.active
 
+def _importar_xlsx_astrea(ws, session) -> dict:
+    importados = 0
+    erros = 0
+    ja_existem = 0
+    sem_cnj = 0
+    erros_amostra = []
+    colunas_planilha = []
+    amostra_linha = {}
+
+    for i, cell in enumerate(ws[1]):
+        colunas_planilha.append(str(cell.value) if cell.value is not None else f"Col{i+1}")
+
+    for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=False)):
+        try:
+            valores = [cell.value for cell in row]
+
+            if row_idx == 0:
+                for ci, v in enumerate(valores):
+                    amostra_linha[f"col_{ci+1}"] = str(v)[:80] if v is not None else "(vazio)"
+
+            cnj = _extrair_cnj_da_linha(valores)
+            if not cnj:
+                sem_cnj += 1
+                continue
+
+            existe = session.query(Processo).filter_by(numero_cnj=cnj).first()
+            if existe:
+                ja_existem += 1
+                continue
+
+            tribunal = ""
+            classe = ""
+            assunto = ""
+            autora = ""
+            reu = ""
+            oab = ""
+            data_ajuizamento = None
+
+            for i, val in enumerate(valores):
+                if not val:
+                    continue
+                val_lower = str(val).lower().strip()
+
+                if i == 0 and val_lower == "processo":
+                    caption = str(valores[i + 1]) if i + 1 < len(valores) and valores[i + 1] else ""
+                    if " x " in caption:
+                        parts = caption.split(" x ", 1)
+                        autora = parts[0].strip()
+                        reu = parts[1].strip()
+                    continue
+
+                if val_lower in ("autor", "autores", "requerente") and i + 1 < len(valores) and valores[i + 1]:
+                    if not autora:
+                        autora = str(valores[i + 1])
+                    continue
+
+                if val_lower in ("réu", "reu", "requerido", "ré", "re") and i + 1 < len(valores) and valores[i + 1]:
+                    if not reu:
+                        reu = str(valores[i + 1])
+                    continue
+
+                if val_lower in ("classe", "natureza", "classe_principal"):
+                    if i + 1 < len(valores) and valores[i + 1]:
+                        classe = str(valores[i + 1])
+                    continue
+
+                if val_lower in ("assunto", "assuntos"):
+                    if i + 1 < len(valores) and valores[i + 1]:
+                        assunto = str(valores[i + 1])
+                    continue
+
+                if val_lower == "tribunal":
+                    if i + 1 < len(valores) and valores[i + 1]:
+                        tribunal = str(valores[i + 1])
+                    continue
+
+                if val_lower in ("data", "data_ajuizamento", "data distribuição", "data autuação", "data da distribuição"):
+                    if i + 1 < len(valores) and valores[i + 1]:
+                        vd = valores[i + 1]
+                        if isinstance(vd, datetime):
+                            data_ajuizamento = vd
+                        elif isinstance(vd, str):
+                            try:
+                                data_ajuizamento = dateparser.parse(vd, dayfirst=True)
+                            except (ValueError, TypeError):
+                                pass
+                    continue
+
+                if val_lower in ("oab", "advogado", "advogados"):
+                    if i + 1 < len(valores) and valores[i + 1]:
+                        oab = str(valores[i + 1])
+                    continue
+
+                match_oab = re.search(r"[A-Z]{2}\d{6}", str(val))
+                if match_oab and not oab:
+                    oab = match_oab.group(0)
+
+            processo = Processo(
+                numero_cnj=cnj,
+                tribunal=tribunal or "",
+                classe=classe or "",
+                assunto=assunto or "",
+                parte_autora=autora or "",
+                parte_re=reu or "",
+                advogado_oab=oab or "",
+                data_ajuizamento=data_ajuizamento,
+            )
+            session.add(processo)
+            importados += 1
+
+            if importados % 50 == 0:
+                session.commit()
+        except Exception as e:
+            logger.error(f"Erro ao importar linha Astrea: {e}")
+            erros += 1
+            if len(erros_amostra) < 3:
+                erros_amostra.append(str(e))
+
+    return {
+        "importados": importados,
+        "erros": erros,
+        "ja_existem": ja_existem,
+        "sem_cnj": sem_cnj,
+        "erros_amostra": erros_amostra,
+        "colunas_planilha": colunas_planilha,
+        "amostra_linha": amostra_linha,
+        "formato": "astrea",
+    }
+
+
+def _importar_xlsx_normal(ws, session) -> dict:
     colunas_idx, colunas_planilha = _mapear_colunas(ws)
     col_processo = colunas_idx["processo"]
 
@@ -78,7 +210,6 @@ def importar_xlsx(caminho: str) -> dict[str, object]:
         break
 
     if col_processo is None:
-        wb.close()
         return {
             "status": "erro",
             "mensagem": "Coluna 'Processo' (CNJ) não encontrada na planilha",
@@ -88,7 +219,6 @@ def importar_xlsx(caminho: str) -> dict[str, object]:
             "dica": "Verifique se a planilha tem uma coluna com nome: processo, número, CNJ, num_cnj ou nº",
         }
 
-    session = get_session()
     importados = 0
     erros = 0
     ja_existem = 0
@@ -151,10 +281,6 @@ def importar_xlsx(caminho: str) -> dict[str, object]:
             if len(erros_amostra) < 3:
                 erros_amostra.append(str(e))
 
-    session.commit()
-    session.close()
-    wb.close()
-
     resultado: dict[str, object] = {
         "status": "ok",
         "importados": importados,
@@ -169,5 +295,37 @@ def importar_xlsx(caminho: str) -> dict[str, object]:
         resultado["erros_amostra"] = erros_amostra
     if importados == 0 and erros == 0 and ja_existem == 0 and sem_cnj == 0:
         resultado["mensagem"] = "Nenhum processo encontrado nas linhas da planilha"
-        resultado["amostra_linha"] = amostra_linha
     return resultado
+
+
+def importar_xlsx(caminho: str) -> dict[str, object]:
+    path = Path(caminho)
+    if not path.exists():
+        return {"status": "erro", "mensagem": f"Arquivo não encontrado: {caminho}"}
+
+    wb = load_workbook(path, read_only=True, data_only=True)
+    ws = wb.active
+
+    is_astrea = False
+    for row in ws.iter_rows(min_row=2, max_row=2, min_col=1, max_col=1, values_only=True):
+        if row[0] and str(row[0]).strip().lower() == "processo":
+            is_astrea = True
+        break
+
+    wb.close()
+
+    session = get_session()
+    wb = load_workbook(path, read_only=True, data_only=True)
+    ws = wb.active
+    try:
+        if is_astrea:
+            resultado = _importar_xlsx_astrea(ws, session)
+        else:
+            resultado = _importar_xlsx_normal(ws, session)
+        resultado.setdefault("status", "ok")
+        resultado.setdefault("formato", "tabular")
+        resultado.setdefault("colunas_mapeadas", {})
+        return resultado
+    finally:
+        wb.close()
+        session.close()
