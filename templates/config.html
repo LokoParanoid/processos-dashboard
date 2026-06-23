@@ -77,8 +77,8 @@
                 </div>
                 <div class="form-group">
                     <label>Senha SMTP</label>
-                    <input type="password" name="smtp_pass" value="{{ config.get('smtp_pass', '') }}">
-                    <div class="hint">Para Gmail, use uma senha de app (não a senha normal)</div>
+                    <input type="password" name="smtp_pass" value="{{ '___SET___' if config.get('smtp_pass') else '' }}">
+                    <div class="hint">Para Gmail, use uma senha de app. Deixe em branco para manter a atual.</div>
                 </div>
                 <div class="form-group">
                     <label>Email para notificações</label>
@@ -90,8 +90,8 @@
                 <h3 style="font-size:0.95rem;margin-bottom:12px;color:#1a1a2e;">✈ Telegram (opcional)</h3>
                 <div class="form-group">
                     <label>Token do Bot</label>
-                    <input type="text" name="telegram_bot_token" value="{{ config.get('telegram_bot_token', '') }}">
-                    <div class="hint">Crie um bot em @BotFather no Telegram</div>
+                    <input type="password" name="telegram_bot_token" value="{{ '___SET___' if config.get('telegram_bot_token') else '' }}">
+                    <div class="hint">Crie um bot em @BotFather no Telegram. Deixe em branco para manter o atual.</div>
                 </div>
                 <div class="form-group">
                     <label>Chat ID</label>

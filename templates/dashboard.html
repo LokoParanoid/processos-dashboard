@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Processos Dashboard</title>
-    <script src="https://unpkg.com/htmx.org@1.9.4"></script>
+    <script src="/static/htmx.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -119,6 +119,8 @@
                     hx-swap="innerHTML">
                     🔄 Atualizar Todos
                 </button>
+                <a href="/busca-oab" class="btn btn-outline">🔍 OAB</a>
+                <a href="/exportar/csv{{ '?' if busca or tribunal_filtro or status_filtro }}{{ 'busca=' ~ busca ~ '&' if busca }}{{ 'tribunal=' ~ tribunal_filtro ~ '&' if tribunal_filtro }}{{ 'status_filtro=' ~ status_filtro if status_filtro }}" class="btn btn-outline">📥 CSV</a>
                 <a href="/config" class="btn btn-outline">⚙ Config</a>
             </div>
         </header>
@@ -129,11 +131,11 @@
                 <div class="label">Total de Processos</div>
             </div>
             <div class="stat-card">
-                <div class="number" style="color:#0f3460">{{ com_mov_nova }}</div>
+                <div class="number" style="color:#0f3460">{{ com_mov_total }}</div>
                 <div class="label">Com Movimentações</div>
             </div>
             <div class="stat-card">
-                <div class="number" style="color:#999">{{ sigilosos }}</div>
+                <div class="number" style="color:#999">{{ sigilosos_total }}</div>
                 <div class="label">Sigilosos</div>
             </div>
             <div class="stat-card">
@@ -189,6 +191,9 @@
                             {% if p.sigiloso %}
                             <span style="color:#e94560;font-size:0.75rem;">🔒</span>
                             {% endif %}
+                            {% if p.ultimo_erro_datajud %}
+                            <span title="Erro na última consulta: {{ p.ultimo_erro_datajud }}" style="color:#e94560;font-size:0.75rem;cursor:help;">⚠</span>
+                            {% endif %}
                         </td>
                         <td>
                             {% if p.ultima_movimentacao_data %}
@@ -221,6 +226,20 @@
                 </tbody>
             </table>
         </div>
+
+        {% if total_paginas > 1 %}
+        <div class="pagination" style="display:flex;justify-content:center;align-items:center;gap:8px;margin-top:16px;">
+            {% set qs = '?' %}
+            {% if busca %}{% set qs = qs ~ 'busca=' ~ busca ~ '&' %}{% endif %}
+            {% if tribunal_filtro %}{% set qs = qs ~ 'tribunal=' ~ tribunal_filtro ~ '&' %}{% endif %}
+            {% if status_filtro %}{% set qs = qs ~ 'status_filtro=' ~ status_filtro ~ '&' %}{% endif %}
+            <a href="{{ qs }}pagina=1" class="btn btn-outline btn-sm {% if pagina == 1 %}disabled{% endif %}">«</a>
+            {% for p in range(inicio_pag, fim_pag + 1) %}
+            <a href="{{ qs }}pagina={{ p }}" class="btn btn-sm {% if p == pagina %}btn-primary{% else %}btn-outline{% endif %}">{{ p }}</a>
+            {% endfor %}
+            <a href="{{ qs }}pagina={{ total_paginas }}" class="btn btn-outline btn-sm {% if pagina == total_paginas %}disabled{% endif %}">»</a>
+        </div>
+        {% endif %}
     </div>
 
     <div class="modal-overlay" id="modal-novo">

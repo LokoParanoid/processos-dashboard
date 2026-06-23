@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Busca por OAB - Processos Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f0f2f5; color: #1a1a2e; padding: 20px;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+        .back { margin-bottom: 16px; }
+        .back a { color: #0f3460; text-decoration: none; font-size: 0.875rem; }
+        .back a:hover { text-decoration: underline; }
+        .card {
+            background: white; border-radius: 10px; padding: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 20px;
+        }
+        .card h2 { font-size: 1.1rem; margin-bottom: 16px; color: #0f3460; }
+        .btn {
+            padding: 8px 16px; border: none; border-radius: 6px;
+            cursor: pointer; font-size: 0.875rem; transition: all 0.2s;
+            text-decoration: none; display: inline-flex; align-items: center; gap: 4px;
+        }
+        .btn-primary { background: #1a1a2e; color: white; }
+        .btn-primary:hover { background: #16213e; }
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; font-size: 0.8rem; color: #666; margin-bottom: 4px; }
+        .form-group input { width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.875rem; }
+        .result-item {
+            padding: 12px; border-bottom: 1px solid #f0f0f0;
+            display: flex; gap: 12px; align-items: flex-start;
+        }
+        .result-item:last-child { border-bottom: none; }
+        .result-cnj { font-family: monospace; font-size: 0.85rem; color: #0f3460; }
+        .result-info { font-size: 0.8rem; color: #666; }
+        .empty { padding: 40px; text-align: center; color: #999; }
+        .row { display: flex; gap: 12px; }
+        .row .form-group { flex: 1; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="back">
+            <a href="/">← Voltar ao Dashboard</a>
+        </div>
+
+        <div class="card">
+            <h2>Buscar Processos por OAB</h2>
+            <p style="font-size:0.875rem;color:#666;margin-bottom:16px;">
+                Consulta a API DataJud do CNJ por número de OAB em todos os tribunais.
+            </p>
+            <form method="GET" action="/busca-oab">
+                <div class="row">
+                    <div class="form-group">
+                        <label>Número da OAB (com ou sem dígito)</label>
+                        <input type="text" name="oab" value="{{ oab }}" placeholder="Ex: 123456" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Tribunal (opcional)</label>
+                        <input type="text" name="tribunal" value="{{ tribunal }}" placeholder="Ex: TJSP, TRF1">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary">Buscar</button>
+            </form>
+        </div>
+
+        {% if oab %}
+        <div class="card">
+            <h2>Resultados para OAB {{ oab }}</h2>
+            {% if resultados %}
+            <p style="font-size:0.8rem;color:#666;margin-bottom:12px;">{{ resultados|length }} processo(s) encontrado(s)</p>
+            {% for r in resultados %}
+            <div class="result-item">
+                <div>
+                    <div class="result-cnj">{{ r.get('numeroProcesso', 'N/I') }}</div>
+                    <div class="result-info">
+                        {{ r.get('classe', {}).get('nome', '') }}
+                        {% if r.get('orgaoJulgador') %} - {{ r.get('orgaoJulgador', {}).get('nome', '') }}{% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="empty">Nenhum processo encontrado para esta OAB.</div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

@@ -48,7 +48,8 @@ def configurar_telegram(token: str, chat_id: str):
     _set_config("telegram_chat_id", chat_id)
 
 
-def notificar(titulo: str, mensagem: str) -> dict:
+    def notificar(titulo: str, mensagem: str) -> dict:
+        """Envia notificação por email/Telegram. Credenciais nunca são logadas."""
     resultados = {"email": False, "telegram": False}
 
     email_to = _get_config("notify_email")
@@ -72,8 +73,10 @@ def notificar(titulo: str, mensagem: str) -> dict:
                     server.login(user, password)
                     server.sendmail(user, [email_to], msg.as_string())
                 resultados["email"] = True
-        except Exception as e:
-            logger.error(f"Erro ao enviar email: {e}")
+        except smtplib.SMTPException:
+            logger.error("Erro ao enviar email: falha SMTP")
+        except Exception:
+            logger.error("Erro ao enviar email")
 
     token = _get_config("telegram_bot_token")
     chat_id = _get_config("telegram_chat_id")
@@ -84,8 +87,8 @@ def notificar(titulo: str, mensagem: str) -> dict:
             req.post(url, json={"chat_id": chat_id, "text": f"*{titulo}*\n\n{mensagem}",
                                 "parse_mode": "Markdown"}, timeout=10)
             resultados["telegram"] = True
-        except Exception as e:
-            logger.error(f"Erro ao enviar Telegram: {e}")
+        except Exception:
+            logger.error("Erro ao enviar Telegram")
 
     return resultados
 

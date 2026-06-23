@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
 
-from database import get_session, Processo, Movimentacao
+from database import get_session, Processo, Movimentacao, Config
 from datajud_client import atualizar_processo
 from notifier import notificar_novas_movimentacoes
 
@@ -16,6 +16,13 @@ scheduler = BackgroundScheduler()
 
 
 def _obter_intervalo() -> int:
+    session = get_session()
+    try:
+        cfg = session.query(Config).filter_by(key="datajud_interval_hours").first()
+        if cfg and cfg.value:
+            return int(cfg.value)
+    finally:
+        session.close()
     return int(os.getenv("DATAJUD_INTERVAL_HOURS", "24"))
 
 
@@ -24,12 +31,13 @@ def executar_ciclo_atualizacao():
     session = get_session()
     try:
         processos = session.query(Processo).all()
-        resultados = {"ok": 0, "erro": 0, "sem_dados": 0, "novas": 0}
+        resultados = {"ok": 0, "erro": 0, "sem_dados": 0, "skipped": 0, "novas": 0}
         for p in processos:
             try:
                 if p.ultima_consulta_datajud:
                     diff = datetime.utcnow() - p.ultima_consulta_datajud
                     if diff.total_seconds() < 3600:
+                        resultados["skipped"] += 1
                         continue
 
                 result = atualizar_processo(p.numero_cnj)

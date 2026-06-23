@@ -1,11 +1,22 @@
 import os
 from datetime import datetime
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, Text, ForeignKey, UniqueConstraint
+from typing import Optional
+
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, Text, ForeignKey, UniqueConstraint, event
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "data", "processos.db")
-engine = create_engine(f"sqlite:///{DB_PATH}", connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(bind=engine)
+_engine = create_engine(f"sqlite:///{DB_PATH}", connect_args={"check_same_thread": False, "timeout": 30})
+SessionLocal = sessionmaker(bind=_engine)
+
+
+@event.listens_for(_engine, "connect")
+def _set_sqlite_pragma(dbapi_connection, connection_record):
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.execute("PRAGMA busy_timeout=30000")
+    cursor.close()
 Base = declarative_base()
 
 
@@ -27,6 +38,7 @@ class Processo(Base):
     ultima_movimentacao_data = Column(DateTime, nullable=True)
     ultima_movimentacao_descricao = Column(Text, nullable=True)
     ultima_consulta_datajud = Column(DateTime, nullable=True)
+    ultimo_erro_datajud = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -58,8 +70,18 @@ class Config(Base):
     value = Column(Text, nullable=True)
 
 
-def init_db():
-    Base.metadata.create_all(bind=engine)
+def init_db() -> None:
+    Base.metadata.create_all(bind=_engine)
+    try:
+        from sqlalchemy import text
+        with _engine.connect() as conn:
+            conn.execute(text("SELECT ultimo_erro_datajud FROM processos LIMIT 1"))
+            conn.close()
+    except Exception:
+        with _engine.connect() as conn:
+            conn.execute(text("ALTER TABLE processos ADD COLUMN ultimo_erro_datajud TEXT"))
+            conn.commit()
+            conn.close()
 
 
 def get_session():

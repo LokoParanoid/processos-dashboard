@@ -34,7 +34,6 @@ TRIBUNAIS_INDICES = {
     "tjac": "api_publica_tjac",
     "tjro": "api_publica_tjro",
     "tjrr": "api_publica_tjrr",
-    "tjrj": "api_publica_tjrj",
     "tjes": "api_publica_tjes",
     "tjms": "api_publica_tjms",
     "tjmt": "api_publica_tjmt",
@@ -83,22 +82,37 @@ def _normalizar_tribunal(tribunal: str) -> Optional[str]:
     return None
 
 
+_TRIBUNAIS_PRIORIDADE = [
+    "tjsp", "tjrj", "tjmg", "tjrs", "tjpr", "tjsc", "tjba",
+    "trf1", "trf3", "trf2", "trf4", "trf5", "trf6",
+    "tst", "stj", "stf", "tse",
+]
+
+
 def consultar_processo(numero_cnj: str, tribunal: Optional[str] = None) -> Optional[dict]:
-    if not tribunal:
-        codes = list(TRIBUNAIS_INDICES.values())
-        for idx_name in codes:
+    if tribunal:
+        idx_key = _normalizar_tribunal(tribunal)
+        if idx_key is None:
+            logger.warning(f"Tribunal não mapeado: {tribunal}")
+            return None
+        idx_name = TRIBUNAIS_INDICES.get(idx_key)
+        return _consultar_por_indice(numero_cnj, idx_name) if idx_name else None
+
+    tentados = set()
+    for key in _TRIBUNAIS_PRIORIDADE:
+        idx_name = TRIBUNAIS_INDICES.get(key)
+        if idx_name:
+            tentados.add(idx_name)
             result = _consultar_por_indice(numero_cnj, idx_name)
             if result:
                 return result
-        return None
-    idx_key = _normalizar_tribunal(tribunal)
-    if idx_key is None:
-        logger.warning(f"Tribunal não mapeado: {tribunal}")
-        return None
-    idx_name = TRIBUNAIS_INDICES.get(idx_key)
-    if not idx_name:
-        return None
-    return _consultar_por_indice(numero_cnj, idx_name)
+
+    for idx_name in TRIBUNAIS_INDICES.values():
+        if idx_name not in tentados:
+            result = _consultar_por_indice(numero_cnj, idx_name)
+            if result:
+                return result
+    return None
 
 
 def _consultar_por_indice(numero_cnj: str, indice: str) -> Optional[dict]:
@@ -118,7 +132,7 @@ def _consultar_por_indice(numero_cnj: str, indice: str) -> Optional[dict]:
         return None
 
 
-def _extrair_movimentacoes(source: dict) -> list[dict]:
+def _extrair_movimentacoes(source: dict) -> list[dict[str, object]]:
     movs = source.get("movimentos", []) or source.get("movimentacoes", [])
     if not movs:
         return []
@@ -154,6 +168,7 @@ def atualizar_processo(numero_cnj: str) -> dict:
             session.commit()
             return {"status": "sem_dados", "mensagem": "DataJud não retornou dados"}
 
+        processo.ultimo_erro_datajud = None
         if not processo.tribunal:
             tribunal_nome = dados.get("orgaoJulgador", {}).get("tribunal") or \
                            dados.get("tribunal") or ""
@@ -162,7 +177,6 @@ def atualizar_processo(numero_cnj: str) -> dict:
         processo.classe = processo.classe or dados.get("classe", {}).get("nome")
         processo.assunto = processo.assunto or dados.get("assunto", "")
         processo.orgao_julgador = processo.orgao_julgador or dados.get("orgaoJulgador", {}).get("nome")
-        processo.data_ajuizamento = processo.data_ajuizamento
 
         movs = _extrair_movimentacoes(dados)
         novas = 0
@@ -193,12 +207,14 @@ def atualizar_processo(numero_cnj: str) -> dict:
     except Exception as e:
         session.rollback()
         logger.error(f"Erro ao atualizar {numero_cnj}: {e}")
+        processo.ultimo_erro_datajud = str(e)[:500]
+        session.commit()
         return {"status": "erro", "mensagem": str(e)}
     finally:
         session.close()
 
 
-def consultar_por_oab(oab: str, tribunal: Optional[str] = None) -> list[dict]:
+def consultar_por_oab(oab: str, tribunal: Optional[str] = None) -> list[dict[str, object]]:
     resultados = []
     indices = [TRIBUNAIS_INDICES.get(_normalizar_tribunal(tribunal))] if tribunal else list(TRIBUNAIS_INDICES.values())
     for idx_name in indices:

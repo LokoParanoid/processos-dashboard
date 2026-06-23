@@ -5,6 +5,8 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
+from dateutil import parser as dateparser
+
 from database import get_session, Processo
 
 logger = logging.getLogger(__name__)
@@ -22,7 +24,7 @@ def _extrair_cnj(texto: str) -> str:
     return ""
 
 
-def importar_xlsx(caminho: str) -> dict:
+def importar_xlsx(caminho: str) -> dict[str, object]:
     path = Path(caminho)
     if not path.exists():
         return {"status": "erro", "mensagem": f"Arquivo não encontrado: {caminho}"}
@@ -45,7 +47,7 @@ def importar_xlsx(caminho: str) -> dict:
         "data_ajuizamento": ["data_ajuizamento", "data_distribuicao", "data_autuacao", "data"],
     }
 
-    def _encontrar_coluna(alias_list):
+    def _encontrar_coluna(alias_list: list[str]) -> int | None:
         for alias in alias_list:
             for col_nome, col_idx in colunas.items():
                 if col_nome and alias in str(col_nome).lower().strip():
@@ -96,18 +98,9 @@ def importar_xlsx(caminho: str) -> dict:
                         data_ajuizamento = val_data
                     elif isinstance(val_data, str):
                         try:
-                            data_ajuizamento = datetime.fromisoformat(val_data)
+                            data_ajuizamento = dateparser.parse(val_data, dayfirst=True)
                         except (ValueError, TypeError):
-                            try:
-                                from datetime import datetime as dt2
-                                for fmt in ["%d/%m/%Y", "%Y-%m-%d", "%d/%m/%Y %H:%M:%S"]:
-                                    try:
-                                        data_ajuizamento = dt2.strptime(val_data, fmt)
-                                        break
-                                    except ValueError:
-                                        pass
-                            except Exception:
-                                pass
+                            pass
 
             processo = Processo(
                 numero_cnj=cnj,
