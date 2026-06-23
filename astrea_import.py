@@ -8,6 +8,7 @@ from openpyxl import load_workbook
 from dateutil import parser as dateparser
 
 from database import get_session, Processo
+from datajud_client import atualizar_processo
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,7 @@ def _extrair_cnj_da_linha(valores: list) -> str:
 
 def _importar_xlsx_astrea(ws, session) -> dict:
     importados = 0
+    importados_cnjs = []
     erros = 0
     ja_existem = 0
     sem_cnj = 0
@@ -174,6 +176,7 @@ def _importar_xlsx_astrea(ws, session) -> dict:
             )
             session.add(processo)
             importados += 1
+            importados_cnjs.append(cnj)
 
             if importados % 50 == 0:
                 session.commit()
@@ -186,6 +189,7 @@ def _importar_xlsx_astrea(ws, session) -> dict:
     session.commit()
     return {
         "importados": importados,
+        "importados_cnjs": importados_cnjs,
         "erros": erros,
         "ja_existem": ja_existem,
         "sem_cnj": sem_cnj,
@@ -221,6 +225,7 @@ def _importar_xlsx_normal(ws, session) -> dict:
         }
 
     importados = 0
+    importados_cnjs = []
     erros = 0
     ja_existem = 0
     sem_cnj = 0
@@ -273,6 +278,7 @@ def _importar_xlsx_normal(ws, session) -> dict:
             )
             session.add(processo)
             importados += 1
+            importados_cnjs.append(cnj)
 
             if importados % 50 == 0:
                 session.commit()
@@ -286,6 +292,7 @@ def _importar_xlsx_normal(ws, session) -> dict:
     resultado: dict[str, object] = {
         "status": "ok",
         "importados": importados,
+        "importados_cnjs": importados_cnjs,
         "erros": erros,
         "ja_existem": ja_existem,
         "sem_cnj": sem_cnj,
@@ -327,6 +334,23 @@ def importar_xlsx(caminho: str) -> dict[str, object]:
         resultado.setdefault("status", "ok")
         resultado.setdefault("formato", "tabular")
         resultado.setdefault("colunas_mapeadas", {})
+
+        atualizados_datajud = 0
+        erros_datajud = 0
+        cnjs_datajud = resultado.get("importados_cnjs", [])
+        for cnj in cnjs_datajud:
+            try:
+                r = atualizar_processo(cnj)
+                if r.get("status") == "ok":
+                    atualizados_datajud += 1
+                else:
+                    erros_datajud += 1
+            except Exception:
+                erros_datajud += 1
+        resultado["atualizados_datajud"] = atualizados_datajud
+        if erros_datajud:
+            resultado["erros_datajud"] = erros_datajud
+
         return resultado
     finally:
         wb.close()

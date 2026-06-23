@@ -358,6 +358,7 @@
                 if (data.ja_existem) html += ' | ' + data.ja_existem + ' já existentes';
                 if (data.sem_cnj) html += ' | ' + data.sem_cnj + ' sem CNJ';
                 if (data.erros) html += ' | ❌ ' + data.erros + ' erros';
+                if (data.atualizados_datajud !== undefined) html += '<br>📡 DataJud: ' + data.atualizados_datajud + ' atualizados' + (data.erros_datajud ? ', ' + data.erros_datajud + ' erros' : '');
                 html += '</div>';
                 if (data.erros_amostra && data.erros_amostra.length) {
                     html += '<div style="font-size:0.8rem;background:#fff3cd;padding:8px;border-radius:6px;margin-bottom:8px;">';
@@ -405,9 +406,14 @@
                     const data = JSON.parse(evt.detail.xhr.responseText);
                     if (data.status === 'ok' || data.importados > 0) {
                         toast.className = 'toast success';
-                        toast.innerHTML = data.novas_movimentacoes !== undefined
-                            ? '✅ Atualizado: ' + data.novas_movimentacoes + ' nova(s) movimentação(ões)'
-                            : '✅ Importado: ' + (data.importados || 0) + ' processos' + (data.erros ? ', erros: ' + data.erros : '');
+                        var msg = '';
+                        if (data.novas_movimentacoes !== undefined) {
+                            msg = '✅ Atualizado: ' + data.novas_movimentacoes + ' nova(s) movimentação(ões)';
+                        } else {
+                            msg = '✅ Importado: ' + (data.importados || 0) + ' processos' + (data.erros ? ', erros: ' + data.erros : '');
+                            if (data.atualizados_datajud !== undefined) msg += ' | 📡 ' + data.atualizados_datajud + ' DataJud' + (data.erros_datajud ? ', ' + data.erros_datajud + ' falhas' : '');
+                        }
+                        toast.innerHTML = msg;
                     } else {
                         toast.className = 'toast error';
                         toast.innerHTML = '❌ ' + (data.mensagem || 'Erro ao processar');
